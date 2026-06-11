@@ -19,12 +19,17 @@ const emit = defineEmits<{
 
 <template>
   <nav class="sidebar" :class="{ 'sidebar--collapsed': collapsed }">
+    <div class="sidebar__accent" />
+
     <button type="button" class="sidebar__toggle" @click="emit('toggle')">
       {{ collapsed ? '»' : '«' }}
     </button>
 
     <template v-if="!collapsed">
-      <h2 class="sidebar__title">Navigation</h2>
+      <h2 class="sidebar__title">
+        <span class="sidebar__logo">F1</span>
+        Navigation
+      </h2>
 
       <p v-if="error" class="sidebar__error">{{ error }}</p>
 
@@ -65,45 +70,83 @@ const emit = defineEmits<{
 
 <style scoped>
 .sidebar {
+  position: relative;
   width: 260px;
   flex-shrink: 0;
-  border-right: 1px solid #e5e4e7;
-  background: #fafafa;
-  padding: 12px;
-  box-sizing: border-box;
+  border-right: 1px solid var(--border);
+  background: var(--bg-sidebar);
+  padding: 16px 14px;
   overflow-y: auto;
 }
 
 .sidebar--collapsed {
   width: 58px;
-  padding: 14px 10px;
+  padding: 16px 10px;
+}
+
+.sidebar__accent {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--f1-red) 0%, var(--f1-red-dim) 100%);
 }
 
 .sidebar__toggle {
-  font: inherit;
   cursor: pointer;
-  border: 1px solid #e5e4e7;
-  background: #fff;
-  border-radius: 6px;
-  padding: 4px 10px;
-  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  border-radius: var(--radius);
+  padding: 6px 12px;
+  margin: 8px 0 16px;
+  color: var(--text-muted);
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.sidebar__toggle:hover {
+  border-color: var(--f1-red);
+  color: var(--text);
 }
 
 .sidebar__title {
-  margin: 0 0 0.75em;
-  font-size: 1em;
+  margin: 0 0 1.25rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sidebar__logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 6px;
+  background: var(--f1-red);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  border-radius: 2px;
 }
 
 .sidebar__section {
-  margin-bottom: 20px;
+  margin-bottom: 1.5rem;
 }
 
 .sidebar__section h3 {
-  margin: 0 0 8px;
-  font-size: 13px;
+  margin: 0 0 10px;
+  padding-left: 8px;
+  font-size: 0.7rem;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #6b6375;
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
+  border-left: 2px solid var(--f1-red);
 }
 
 .sidebar__section ul {
@@ -111,36 +154,44 @@ const emit = defineEmits<{
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 4px;
+  gap: 2px;
 }
 
 .sidebar__item {
   width: 100%;
   text-align: left;
-  font: inherit;
   cursor: pointer;
   border: 1px solid transparent;
+  border-left: 3px solid transparent;
   background: transparent;
-  border-radius: 6px;
-  padding: 8px 10px;
+  border-radius: var(--radius);
+  padding: 9px 10px;
+  color: var(--text-muted);
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
 .sidebar__item:hover {
-  background: #f0f0f0;
+  background: var(--bg-elevated);
+  color: var(--text);
 }
 
 .sidebar__item--active {
-  background: rgba(170, 59, 255, 0.1);
-  border-color: rgba(170, 59, 255, 0.4);
+  background: rgba(225, 6, 0, 0.1);
+  border-left-color: var(--f1-red);
+  color: var(--text);
 }
 
 .sidebar__item--weekend {
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 .sidebar__error {
   margin: 0 0 12px;
-  font-size: 13px;
-  color: #b91c1c;
+  padding: 8px 10px;
+  font-size: 0.8rem;
+  color: #ff6b6b;
+  background: rgba(225, 6, 0, 0.12);
+  border: 1px solid rgba(225, 6, 0, 0.3);
+  border-radius: var(--radius);
 }
 </style>

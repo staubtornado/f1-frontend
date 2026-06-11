@@ -19,19 +19,27 @@ function findWeekend(weekends: RaceWeekend[], id: number | null) {
 
 <template>
   <main class="main">
-    <p v-if="loading" class="main__status">Laden…</p>
+    <p v-if="loading" class="main__status">
+      <span class="main__spinner" />
+      Laden…
+    </p>
 
     <section v-else-if="!selectedSeason" class="main__welcome">
+      <p class="main__eyebrow">Formula 1</p>
       <h1>F1 Frontend</h1>
-      <p>Wähle bitte links in der Navigation eine Saison aus.</p>
+      <p class="main__lead">Wähle links in der Navigation eine Saison aus.</p>
     </section>
 
     <section v-else-if="!selectedWeekendId" class="main__welcome">
-      <h1>Saison {{ selectedSeason }}</h1>
-      <p>{{ weekends.length }} Race Weekends — wähle bitte eines in der Navigation.</p>
+      <p class="main__eyebrow">Saison {{ selectedSeason }}</p>
+      <h1>Race Weekends</h1>
+      <p class="main__lead">
+        {{ weekends.length }} Weekends verfügbar — wähle eines in der Navigation.
+      </p>
     </section>
 
     <section v-else class="main__detail">
+      <p class="main__eyebrow">Saison {{ selectedSeason }}</p>
       <h1>{{ findWeekend(weekends, selectedWeekendId)?.name ?? 'Weekend' }}</h1>
       <p v-if="error" class="main__error">{{ error }}</p>
       <ul v-else class="session-list">
@@ -40,7 +48,7 @@ function findWeekend(weekends: RaceWeekend[], id: number | null) {
           <time>{{ formatDateTime(session.start_time) }}</time>
         </li>
       </ul>
-      <p v-if="!error && sessions.length === 0">Keine Sessions gefunden.</p>
+      <p v-if="!error && sessions.length === 0" class="main__lead">Keine Sessions gefunden.</p>
     </section>
   </main>
 </template>
@@ -48,43 +56,99 @@ function findWeekend(weekends: RaceWeekend[], id: number | null) {
 <style scoped>
 .main {
   flex: 1;
-  padding: 24px;
-  box-sizing: border-box;
+  padding: 32px 40px;
+  background:
+    radial-gradient(ellipse at top right, rgba(225, 6, 0, 0.06) 0%, transparent 55%),
+    var(--bg);
+}
+
+.main__eyebrow {
+  margin: 0 0 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--f1-red);
 }
 
 .main__welcome h1,
 .main__detail h1 {
-  margin-top: 0;
+  margin: 0 0 12px;
 }
 
-.main__status,
-.main__error {
-  color: #6b6375;
+.main__lead {
+  margin: 0;
+  color: var(--text-muted);
+  max-width: 36ch;
+}
+
+.main__status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-muted);
+}
+
+.main__spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border);
+  border-top-color: var(--f1-red);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .main__error {
-  color: #b91c1c;
+  padding: 10px 14px;
+  color: #ff6b6b;
+  background: rgba(225, 6, 0, 0.1);
+  border: 1px solid rgba(225, 6, 0, 0.3);
+  border-radius: var(--radius);
 }
 
 .session-list {
   list-style: none;
-  margin: 0;
+  margin: 24px 0 0;
   padding: 0;
   display: grid;
-  gap: 8px;
-  max-width: 480px;
+  gap: 6px;
+  max-width: 520px;
 }
 
 .session-list li {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 16px;
-  padding: 10px 14px;
-  border: 1px solid #e5e4e7;
-  border-radius: 8px;
+  padding: 12px 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--f1-red);
+  border-radius: var(--radius);
+  transition: border-color 0.15s;
+}
+
+.session-list li:hover {
+  border-color: var(--border);
+  border-left-color: var(--f1-red);
 }
 
 .session-list__type {
-  font-weight: 500;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+}
+
+time {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 </style>

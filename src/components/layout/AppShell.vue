@@ -93,5 +93,6 @@ function onSelectWeekend(weekendId: number) {
 .shell {
   display: flex;
   min-height: 100svh;
+  background: var(--bg);
 }
 </style>
