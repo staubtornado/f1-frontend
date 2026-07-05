@@ -21,11 +21,11 @@ const emit = defineEmits<{
   <nav class="sidebar" :class="{ 'sidebar--collapsed': collapsed }">
     <div class="sidebar__accent" />
 
-    <button type="button" class="sidebar__toggle" @click="emit('toggle')">
+    <button type="button" class="sidebar__toggle" @click="emit('toggle')"> <!-- Button to toggle the collapsed state of the sidebar -->
       {{ collapsed ? '»' : '«' }}
     </button>
 
-    <template v-if="!collapsed">
+    <template v-if="!collapsed"> 
       <h2 class="sidebar__title">
         <span class="sidebar__logo">F1</span>
         Navigation
