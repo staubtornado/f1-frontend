@@ -71,6 +71,7 @@ const loadSessions = async () => {
   try {
     sessions.value = await getSessions(props.weekend.id)
     console.log(`Loaded ${sessions.value.length} sessions for weekend ${props.weekend.id}`)
+    console.log(`Flag: ${props.weekend.country?.flag_base64}`)
   } catch (err) {
     error.value = 'Sessions konnten nicht geladen werden.'
     console.error(err)
@@ -92,13 +93,18 @@ watch(() => props.weekend.id, loadSessions)
     <section class="weekend-info">
       <div class="weekend-info__container">
         <div class="weekend-info__header">
-          <div class="weekend-info__flag-wrapper" v-if="weekend.country?.flag_base64">
-            <div 
-              :style="{ backgroundImage: `url('data:image/svg+xml;base64,${weekend.country.flag_base64}')` }"
-              class="weekend-info__flag"
-              :title="weekend.country.name_de"
-            />
-          </div>
+            <div
+                class="weekend-info__flag-wrapper"
+                v-if="weekend.country?.flag_base64"
+                >
+                <div 
+                    :style="{
+                    backgroundImage: `url('data:image/png;base64,${weekend.country.flag_base64}')`
+                    }"
+                    class="weekend-info__flag"
+                    :title="weekend.country.name_de"
+                />
+            </div>
           <div class="weekend-info__text">
             <h1 class="weekend-info__name">{{ weekend.name }}</h1>
             <p class="weekend-info__country" v-if="weekend.country">
