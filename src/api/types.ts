@@ -1,3 +1,4 @@
+/** Land, in dem ein Grand-Prix-Wochenende stattfindet. */
 export interface Country {
   id: number
   name: string
@@ -8,9 +9,10 @@ export interface Country {
   flag_base64: string
 }
 
+/** Ein Grand-Prix-Wochenende */
 export interface RaceWeekend {
-  name: string
   id: number
+  name: string
   country: Country | null
   circuit_id: number
   date_start: string
@@ -19,6 +21,7 @@ export interface RaceWeekend {
   cancelled: boolean
 }
 
+/** Mögliche Session-Typen eines Race Weekends */
 export type SessionType =
   | 'practice_one'
   | 'practice_two'
@@ -28,6 +31,7 @@ export type SessionType =
   | 'qualifying'
   | 'grand_prix'
 
+/** Eine einzelne Session (Training, Qualifying, Rennen …) eines Race Weekends */
 export interface Session {
   id: number
   type: SessionType
