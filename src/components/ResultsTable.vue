@@ -11,7 +11,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
-import { getSessions } from '../api/endpoints'
+import { getSessionResults, getSessions } from '../api/endpoints'
 import type { Session, RaceWeekend } from '../api/types'
 
 interface Props {
@@ -23,6 +23,11 @@ const props = defineProps<Props>()
 const sessions = ref<Session[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
+const popupVisible = ref(false)
+const popupLoading = ref(false)
+const popupError = ref<string | null>(null)
+const popupSession = ref<Session | null>(null)
+const sessionResults = ref<any[]>([])
 
 /**
  * Konvertiert den Session-Typ in einen lesbaren deutschen Namen
@@ -37,7 +42,7 @@ const getSessionTypeName = (type: string): string => {
     sprint: 'Sprint',
     sprint_qualifying: 'Sprint-Qualifying',
     qualifying: 'Qualifying',
-    grand_prix: 'Grand Prix'
+    grand_prix: 'Grand Prix',
   }
   return names[type] || type
 }
@@ -50,6 +55,15 @@ const getSessionTypeName = (type: string): string => {
 const formatTime = (timeStr: string): string => {
   const date = new Date(timeStr)
   return date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+}
+
+const formatDuration = (seconds: number | null): string => {
+  if (seconds == null) return '-'
+
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = seconds % 60
+
+  return `${minutes}:${remainingSeconds.toFixed(3).padStart(6, '0')}`
 }
 
 /**
@@ -70,14 +84,40 @@ const loadSessions = async () => {
   error.value = null
   try {
     sessions.value = await getSessions(props.weekend.id)
-    console.log(`Loaded ${sessions.value.length} sessions for weekend ${props.weekend.id}`)
-    console.log(`Flag: ${props.weekend.country?.flag_base64}`)
   } catch (err) {
     error.value = 'Sessions konnten nicht geladen werden.'
     console.error(err)
   } finally {
     loading.value = false
   }
+}
+
+const openSessionPopup = async (session: Session) => {
+  popupVisible.value = true
+  popupLoading.value = true
+  popupError.value = null
+  popupSession.value = session
+  sessionResults.value = []
+
+  try {
+    const result: any = await getSessionResults(session.id)
+    console.log('Session Results:', result)
+    sessionResults.value = Array.isArray(result) 
+        ? result 
+        : result.classifications ?? []
+  } catch (err) {
+    popupError.value = 'Ergebnisse konnten nicht geladen werden.'
+    console.error(err)
+  } finally {
+    popupLoading.value = false
+  }
+}
+
+const closeSessionPopup = () => {
+  popupVisible.value = false
+  popupError.value = null
+  popupSession.value = null
+  sessionResults.value = []
 }
 
 // Lädt Sessions beim initialen Mount
@@ -149,15 +189,17 @@ watch(() => props.weekend.id, loadSessions)
         <thead>
           <tr>
             <th>Session</th>
+            <th>ID</th>
             <th>Datum</th>
             <th>Uhrzeit</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="session in sessions" :key="session.id">
+          <tr v-for="session in sessions" :key="session.id" @click="openSessionPopup(session)">
             <td class="results-table__session-type">
               {{ getSessionTypeName(session.type) }}
             </td>
+            <td class="results-table__session-id">{{ session.id }}</td>
             <td class="results-table__date">
               {{ formatDate(session.start_time) }}
             </td>
@@ -172,6 +214,78 @@ watch(() => props.weekend.id, loadSessions)
         <p>Keine Sessions verfügbar</p>
       </div>
     </section>
+
+    <!-- Session Results Popup -->
+    <div v-if="popupVisible" class="session-results-popup">
+        <div class="session-results-popup__container">
+            <div class="session-results-popup__header">
+            <h3 class="session-results-popup__title">
+                Ergebnisse für {{ popupSession ? getSessionTypeName(popupSession.type) : 'Session' }}
+                <span v-if="popupLoading" class="session-results-popup__loading-indicator">Laden…</span>
+            </h3>
+            <button class="session-results-popup__close" @click="closeSessionPopup">✖</button>
+            </div>
+
+            <div v-if="popupError" class="session-results-popup__error">
+            {{ popupError }}
+            </div>
+
+            <div v-else-if="!popupLoading && sessionResults.length === 0" class="session-results-popup__empty">
+            <p>Keine Ergebnisse verfügbar</p>
+            </div>
+            <div class="session-results-popup__drivers">
+
+            <div class="session-results-popup__driver-header">
+                <div>Pos.</div>
+                <div>Fahrer</div>
+                <div>Status</div>
+                <div>Zeit</div>
+                <div>Runden</div>
+                <div>Abstand</div>
+            </div>
+
+            <div
+                v-for="driver in sessionResults"
+                :key="driver.driver_id"
+                class="session-results-popup__driver-row"
+            >
+                <div class="driver-position">
+                {{ driver.position }}
+                </div>
+
+                <div class="driver-id">
+                #{{ driver.driver_id }}
+                </div>
+
+                <div>
+                <span class="driver-status">
+                    {{ driver.status }}
+                </span>
+                </div>
+
+                <div class="driver-time">
+                {{ formatDuration(driver.time) }}
+                </div>
+
+                <div class="driver-laps">
+                {{ driver.laps_completed }}
+                </div>
+
+                <div class="driver-gap">
+                {{
+                    driver.gap_to_leader === 0
+                    ? 'Leader'
+                    : driver.gap_to_leader != null
+                        ? `+${driver.gap_to_leader.toFixed(3)}s`
+                        : '-'
+                }}
+                </div>
+            </div>
+
+            </div>
+            
+        </div>
+    </div>
   </div>
 </template>
 
@@ -335,6 +449,295 @@ watch(() => props.weekend.id, loadSessions)
 .results-table__date,
 .results-table__time {
   color: rgba(255, 255, 255, 0.8);
+}
+
+/* Session Results Popup Styles */
+
+.session-results-popup {
+  position: fixed;
+  inset: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 24px;
+
+  background: rgba(0, 0, 0, 0.82);
+  backdrop-filter: blur(6px);
+
+  z-index: 1000;
+}
+
+
+/* Popup Fenster */
+
+.session-results-popup__container {
+  width: min(1100px, 95vw);
+  max-height: 85vh;
+
+  display: flex;
+  flex-direction: column;
+
+  background: #121212;
+
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+
+  overflow: hidden;
+
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.6);
+}
+
+
+/* Header */
+
+.session-results-popup__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  padding: 20px 24px;
+
+  border-bottom: 1px solid var(--border);
+  background: #181818;
+}
+
+.session-results-popup__title {
+  margin: 0;
+
+  font-size: 1.2rem;
+  font-weight: 600;
+
+  color: var(--text);
+}
+
+.session-results-popup__close {
+  width: 36px;
+  height: 36px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: rgba(255, 255, 255, 0.06);
+
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+
+  color: rgba(255, 255, 255, 0.7);
+
+  font-size: 1rem;
+
+  cursor: pointer;
+
+  transition: 0.2s;
+}
+
+.session-results-popup__close:hover {
+  color: white;
+
+  border-color: rgba(225, 6, 0, 0.8);
+  background: rgba(225, 6, 0, 0.15);
+}
+
+
+/* Loading */
+
+.session-results-popup__loading-indicator {
+  margin-left: 10px;
+
+  font-size: 0.8rem;
+  font-weight: 400;
+
+  color: rgba(255, 255, 255, 0.5);
+}
+
+
+/* Error / Empty */
+
+.session-results-popup__error,
+.session-results-popup__empty {
+  padding: 40px;
+
+  text-align: center;
+
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.session-results-popup__error {
+  color: #ff6b6b;
+}
+
+
+/* Scrollbarer Tabellenbereich */
+
+.session-results-popup__content {
+  flex: 1;
+
+  overflow: auto;
+}
+
+.session-results-popup__drivers {
+  min-width: 800px;
+  overflow: scroll;
+}
+
+
+/* Tabellen Header */
+
+.session-results-popup__driver-header {
+  position: sticky;
+  top: 0;
+
+  z-index: 2;
+
+  display: grid;
+
+  grid-template-columns:
+    70px
+    100px
+    140px
+    minmax(140px, 1fr)
+    100px
+    140px;
+
+  align-items: center;
+
+  padding: 12px 20px;
+
+  background: #1c1c1c;
+
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+
+  font-size: 0.72rem;
+  font-weight: 600;
+
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+
+  color: rgba(255, 255, 255, 0.5);
+}
+
+
+/* Fahrer Zeilen */
+
+.session-results-popup__driver-row {
+  display: grid;
+
+  grid-template-columns:
+    70px
+    100px
+    140px
+    minmax(140px, 1fr)
+    100px
+    140px;
+
+  align-items: center;
+
+  padding: 14px 20px;
+
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+
+  color: var(--text);
+
+  transition: background 0.15s ease;
+}
+
+.session-results-popup__driver-row:hover {
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.session-results-popup__driver-row:last-child {
+  border-bottom: none;
+}
+
+
+/* Position */
+
+.driver-position {
+  width: 34px;
+  height: 34px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 6px;
+
+  background: rgba(255, 255, 255, 0.07);
+
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+
+/* Driver ID */
+
+.driver-id {
+  font-weight: 600;
+
+  color: rgba(255, 255, 255, 0.85);
+}
+
+
+/* Status */
+
+.driver-status {
+  display: inline-block;
+
+  padding: 4px 8px;
+
+  border-radius: 5px;
+
+  background: rgba(255, 255, 255, 0.07);
+
+  font-size: 0.75rem;
+
+  color: rgba(255, 255, 255, 0.7);
+}
+
+
+/* Zeiten */
+
+.driver-time,
+.driver-gap {
+  font-family: monospace;
+
+  font-size: 0.9rem;
+}
+
+.driver-laps {
+  font-weight: 500;
+}
+
+
+/* Mobile */
+
+@media (max-width: 768px) {
+
+  .session-results-popup {
+    padding: 12px;
+  }
+
+  .session-results-popup__container {
+    width: 100%;
+    max-height: 90vh;
+  }
+
+  .session-results-popup__header {
+    padding: 16px;
+  }
+
+  .session-results-popup__title {
+    font-size: 1rem;
+  }
+
+  .session-results-popup__content {
+    overflow-x: auto;
+  }
+
 }
 
 @media (max-width: 768px) {
