@@ -1,5 +1,5 @@
 import { apiClient } from '../client'
-import type { DriverResultRow, RaceWeekend, Session, SessionResultEntry } from '../types'
+import type { RaceWeekend, Session, SessionResultEntry } from '../types'
 
 /**
  * Alle verfügbaren Saisons abrufen

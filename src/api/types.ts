@@ -39,32 +39,9 @@ export interface Session {
   start_time: string
 }
 
-
-
-/** Ein einzelner Fahrer in einem Ergebnis-Set. */
-export interface DriverSummary {
-  id?: number
-  name?: string
-  full_name?: string
-  first_name?: string
-  last_name?: string
-  display_name?: string
-  code?: string
-}
-
-/** Eine Zeile im Session-Ergebnis pro Fahrer. */
-export interface DriverResultRow {
-  id: number
-  driverName: string
-  team: string
-  points: number
-  position: number
-}
-
 /** Ein Rückgabe-Objekt für Session-Ergebnisse; kann je nach Backend leicht variieren. */
 export interface SessionResultEntry {
   id?: number
-  driver?: DriverSummary | null
   driver_name?: string
   driverName?: string
   name?: string
