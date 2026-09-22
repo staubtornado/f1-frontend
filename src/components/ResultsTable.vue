@@ -11,11 +11,13 @@
 
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
-import { getSessionResults, getSessions } from '../api/endpoints'
-import type { Session, RaceWeekend, SessionClassification } from '../api/types'
+import { getSeasonDriver, getSessionResults, getSessions } from '../api/endpoints'
+import type { Driver, Session, RaceWeekend, SessionClassification } from '../api/types'
+import DriverDetailsModal from './DriverDetailsModal.vue'
 
 interface Props {
   weekend: RaceWeekend
+  season: number
 }
 
 const props = defineProps<Props>()
@@ -28,6 +30,8 @@ const popupLoading = ref(false)
 const popupError = ref<string | null>(null)
 const popupSession = ref<Session | null>(null)
 const sessionResults = ref<SessionClassification[]>([])
+const driverProfiles = ref<Record<number, Driver>>({})
+const selectedDriverId = ref<number | null>(null)
 let sessionsRequestId = 0
 let resultsRequestId = 0
 
@@ -110,6 +114,18 @@ const openSessionPopup = async (session: Session) => {
     const result = await getSessionResults(session.id)
     if (requestId !== resultsRequestId) return
     sessionResults.value = result.classifications
+
+    const profiles = await Promise.all(result.classifications.map(async ({ driver_id }) => {
+      try {
+        return [driver_id, await getSeasonDriver(props.season, driver_id)] as const
+      } catch {
+        return null
+      }
+    }))
+
+    if (requestId === resultsRequestId) {
+      driverProfiles.value = Object.fromEntries(profiles.filter((profile) => profile !== null))
+    }
   } catch (err) {
     if (requestId !== resultsRequestId) return
     popupError.value = 'Ergebnisse konnten nicht geladen werden.'
@@ -125,6 +141,12 @@ const closeSessionPopup = () => {
   popupError.value = null
   popupSession.value = null
   sessionResults.value = []
+  driverProfiles.value = {}
+  selectedDriverId.value = null
+}
+
+const getDriverLabel = (driverId: number): string => {
+  return driverProfiles.value[driverId]?.full_name ?? `Fahrer #${driverId}`
 }
 
 // Lädt Sessions beim initialen Mount
@@ -261,7 +283,12 @@ watch(() => props.weekend.id, loadSessions)
                 </div>
 
                 <div class="driver-id">
-                #{{ driver.driver_id }}
+                  <button
+                    class="driver-id__link"
+                    type="button"
+                    :disabled="!driverProfiles[driver.driver_id]"
+                    @click="selectedDriverId = driver.driver_id"
+                  >{{ getDriverLabel(driver.driver_id) }}</button>
                 </div>
 
                 <div>
@@ -293,6 +320,13 @@ watch(() => props.weekend.id, loadSessions)
             
         </div>
     </div>
+
+    <DriverDetailsModal
+      :open="selectedDriverId !== null"
+      :season="season"
+      :driver-id="selectedDriverId"
+      @close="selectedDriverId = null"
+    />
   </div>
 </template>
 
@@ -686,6 +720,28 @@ watch(() => props.weekend.id, loadSessions)
   font-weight: 600;
 
   color: rgba(255, 255, 255, 0.85);
+}
+
+.driver-id__link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.driver-id__link:hover,
+.driver-id__link:focus-visible {
+  color: #ff746e;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.driver-id__link:disabled {
+  cursor: default;
+  text-decoration: none;
 }
 
 

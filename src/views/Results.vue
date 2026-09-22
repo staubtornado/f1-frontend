@@ -151,6 +151,7 @@ const goHome = () => {
       <ResultsTable
         v-if="selectedWeekendId && selectedWeekend"
         :weekend="selectedWeekend"
+        :season="selectedSeason!"
       />
       <SeasonStandings
         v-else-if="selectedSeason !== null"

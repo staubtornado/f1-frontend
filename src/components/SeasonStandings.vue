@@ -2,6 +2,7 @@
 import { onMounted, ref, watch } from 'vue'
 import { getDriverStandings, getSeasonDriver, getTeamStandings } from '../api/endpoints'
 import type { Driver, DriverStanding, TeamStanding } from '../api/types'
+import DriverDetailsModal from './DriverDetailsModal.vue'
 
 interface Props {
   season: number
@@ -19,6 +20,7 @@ const loading = ref(true)
 const error = ref<string | null>(null)
 const teamError = ref<string | null>(null)
 let loadRequestId = 0
+const selectedDriverId = ref<number | null>(null)
 
 const getDriverLabel = (row: DriverStandingRow): string => {
   return row.driver?.full_name ?? `Fahrer #${row.driver_id}`
@@ -103,11 +105,16 @@ watch(() => props.season, loadStandings)
             <tr v-for="row in driverRows" :key="row.driver_id">
               <td class="standings-table__position">{{ row.position }}</td>
               <td>
-                <span class="standings-table__name">{{ getDriverLabel(row) }}</span>
+                <button
+                  class="standings-table__name standings-table__driver-link"
+                  type="button"
+                  :disabled="!row.driver"
+                  @click="selectedDriverId = row.driver_id"
+                >{{ getDriverLabel(row) }}</button>
                 <span class="standings-table__team"> | {{ getTeamLabel(row) }}</span>
               </td>
               <td class="standings-table__points">{{ row.points }} PTS</td>
-            </tr>
+           </tr>
           </tbody>
         </table>
       </section>
@@ -136,6 +143,13 @@ watch(() => props.season, loadStandings)
     </div>
 
     <p v-else class="standings__status">Für diese Saison sind keine Wertungen verfügbar.</p>
+
+    <DriverDetailsModal
+      :open="selectedDriverId !== null"
+      :season="season"
+      :driver-id="selectedDriverId"
+      @close="selectedDriverId = null"
+    />
   </section>
 </template>
 
@@ -223,6 +237,28 @@ watch(() => props.season, loadStandings)
 
 .standings-table__name {
   font-weight: 600;
+}
+
+.standings-table__driver-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.standings-table__driver-link:hover,
+.standings-table__driver-link:focus-visible {
+  color: var(--f1-red);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.standings-table__driver-link:disabled {
+  cursor: default;
+  text-decoration: none;
 }
 
 .standings-table__team {
