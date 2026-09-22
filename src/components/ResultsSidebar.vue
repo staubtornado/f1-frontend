@@ -104,6 +104,8 @@ const formatDate = (dateStr: string): string => {
   flex-direction: column;
   overflow-y: auto;
   max-height: 100svh;
+  position: sticky;
+  top: 0;
 }
 
 .sidebar__header {
