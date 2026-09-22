@@ -5,6 +5,7 @@ import type {
   RaceWeekend,
   Session,
   SessionResult,
+  StartingGrid,
   TeamStandings,
 } from '../types'
 
@@ -54,6 +55,7 @@ export function getSeasonDriver(season: number, driverId: number, signal?: Abort
   return apiClient<Driver>(`/seasons/${season}/drivers/${driverId}/`, { signal })
 }
 
-//export function getStartingGrid(sessionId: number) {
-  //return apiClient<StartingGrid>(`/session/${sessionId}/starting_grid/`)
-//}
+/** Starting Grids (Qualifying und ggf. Sprint-Qualifying) eines Wochenendes laden. */
+export function getStartingGrid(weekendId: number, signal?: AbortSignal) {
+  return apiClient<StartingGrid[]>(`/weekend/${weekendId}/starting_grid/`, { signal })
+}

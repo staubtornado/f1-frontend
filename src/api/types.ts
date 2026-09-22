@@ -92,3 +92,17 @@ export interface SessionResult {
   session_id: number
   classifications: SessionClassification[]
 }
+
+/** Eine Startposition eines Fahrers im Starting Grid. */
+export interface StartingPosition {
+  position: number
+  driver_id: number
+}
+
+/** Starting Grid für Qualifying oder Sprint-Qualifying eines Wochenendes. */
+export interface StartingGrid {
+  positions: StartingPosition[]
+  weekend_id: number
+  session_type: SessionType
+  session_id: number
+}

@@ -21,6 +21,9 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const emit = defineEmits<{
+  'show-starting-grid': [session: Session]
+}>()
 
 const sessions = ref<Session[]>([])
 const loading = ref(true)
@@ -54,6 +57,9 @@ const getSessionTypeName = (type: string): string => {
   }
   return names[type] || type
 }
+
+const hasStartingGrid = (session: Session): boolean =>
+  session.type === 'grand_prix' || session.type === 'sprint'
 
 /**
  * Formatiert einen DateTime-String in die deutsche Zeitformat (HH:MM)
@@ -235,6 +241,7 @@ onBeforeUnmount(() => {
             <th>ID</th>
             <th>Datum</th>
             <th>Uhrzeit</th>
+            <th>Starting Grid</th>
           </tr>
         </thead>
         <tbody>
@@ -248,6 +255,15 @@ onBeforeUnmount(() => {
             </td>
             <td class="results-table__time">
               {{ formatTime(session.start_time) }}
+            </td>
+            <td class="results-table__grid-action">
+              <button
+                v-if="hasStartingGrid(session)"
+                class="results-table__grid-button"
+                type="button"
+                @click.stop="emit('show-starting-grid', session)"
+              >Show Starting Grid</button>
+              <span v-else aria-hidden="true">—</span>
             </td>
           </tr>
         </tbody>
@@ -503,6 +519,35 @@ onBeforeUnmount(() => {
 .results-table__date,
 .results-table__time {
   color: rgba(255, 255, 255, 0.8);
+}
+
+.results-table__grid-action {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.results-table__grid-action > span {
+  color: var(--text-muted);
+}
+
+.results-table__grid-button {
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: rgb(255 255 255 / 5%);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.results-table__grid-button:hover,
+.results-table__grid-button:focus-visible {
+  border-color: var(--f1-red);
+  background: rgb(225 6 0 / 18%);
+  outline: none;
 }
 
 /* Session Results Popup Styles */

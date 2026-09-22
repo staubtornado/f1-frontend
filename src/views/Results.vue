@@ -21,10 +21,11 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { getSeasons, getWeekends } from '../api/endpoints'
-import type { RaceWeekend } from '../api/types'
+import type { RaceWeekend, Session } from '../api/types'
 import ResultsSidebar from '../components/ResultsSidebar.vue'
 import ResultsTable from '../components/ResultsTable.vue'
 import SeasonStandings from '../components/SeasonStandings.vue'
+import StartingGrid from '../components/StartingGrid.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -33,6 +34,7 @@ const seasons = ref<number[]>([])
 const selectedSeason = ref<number | null>(null)
 const weekends = ref<RaceWeekend[]>([])
 const selectedWeekendId = ref<number | null>(null)
+const startingGridSession = ref<Session | null>(null)
 const loading = ref(true)
 const error = ref<string | null>(null)
 let weekendRequestId = 0
@@ -96,6 +98,7 @@ watch(selectedSeason, async (newSeason) => {
   weekendsController = controller
   const requestId = ++weekendRequestId
   selectedWeekendId.value = null
+  startingGridSession.value = null
   weekends.value = []
   error.value = null
 
@@ -136,6 +139,11 @@ const selectSeason = (season: number) => {
   selectedSeason.value = season
 }
 
+const selectWeekend = (weekendId: number) => {
+  startingGridSession.value = null
+  selectedWeekendId.value = weekendId
+}
+
 /**
  * Navigiert zurück zur Startseite (Home)
  */
@@ -154,15 +162,24 @@ const goHome = () => {
       :loading="loading"
       :error="error"
       @select-season="selectSeason"
-      @select-weekend="selectedWeekendId = $event"
+      @select-weekend="selectWeekend"
       @go-home="goHome"
     />
 
     <main class="results-page__main">
-      <ResultsTable
-        v-if="selectedWeekendId && selectedWeekend"
+      <StartingGrid
+        v-if="selectedWeekendId && selectedWeekend && startingGridSession"
+        :key="`${selectedWeekend.id}-${startingGridSession.id}`"
         :weekend="selectedWeekend"
         :season="selectedSeason!"
+        :source-session="startingGridSession"
+        @back="startingGridSession = null"
+      />
+      <ResultsTable
+        v-else-if="selectedWeekendId && selectedWeekend"
+        :weekend="selectedWeekend"
+        :season="selectedSeason!"
+        @show-starting-grid="startingGridSession = $event"
       />
       <SeasonStandings
         v-else-if="selectedSeason !== null"
