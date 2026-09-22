@@ -216,8 +216,8 @@ watch(() => props.weekend.id, loadSessions)
     </section>
 
     <!-- Session Results Popup -->
-    <div v-if="popupVisible" class="session-results-popup">
-        <div class="session-results-popup__container">
+    <div v-if="popupVisible" class="session-results-popup" @click="closeSessionPopup">
+        <div class="session-results-popup__container" @click.stop>
             <div class="session-results-popup__header">
             <h3 class="session-results-popup__title">
                 Ergebnisse für {{ popupSession ? getSessionTypeName(popupSession.type) : 'Session' }}
