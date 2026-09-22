@@ -11,11 +11,13 @@
 
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
-import { getSessionResults, getSessions } from '../api/endpoints'
-import type { Session, RaceWeekend } from '../api/types'
+import { getSeasonDriver, getSessionResults, getSessions } from '../api/endpoints'
+import type { Driver, Session, RaceWeekend, SessionClassification } from '../api/types'
+import DriverDetailsModal from './DriverDetailsModal.vue'
 
 interface Props {
   weekend: RaceWeekend
+  season: number
 }
 
 const props = defineProps<Props>()
@@ -27,7 +29,11 @@ const popupVisible = ref(false)
 const popupLoading = ref(false)
 const popupError = ref<string | null>(null)
 const popupSession = ref<Session | null>(null)
-const sessionResults = ref<any[]>([])
+const sessionResults = ref<SessionClassification[]>([])
+const driverProfiles = ref<Record<number, Driver>>({})
+const selectedDriverId = ref<number | null>(null)
+let sessionsRequestId = 0
+let resultsRequestId = 0
 
 /**
  * Konvertiert den Session-Typ in einen lesbaren deutschen Namen
@@ -80,19 +86,24 @@ const formatDate = (timeStr: string): string => {
  * Lädt Sessions vom Backend, wenn die Komponente geladen oder das Wochenende gewechselt wird
  */
 const loadSessions = async () => {
+  const requestId = ++sessionsRequestId
   loading.value = true
   error.value = null
   try {
-    sessions.value = await getSessions(props.weekend.id)
+    const loadedSessions = await getSessions(props.weekend.id)
+    if (requestId !== sessionsRequestId) return
+    sessions.value = loadedSessions
   } catch (err) {
+    if (requestId !== sessionsRequestId) return
     error.value = 'Sessions konnten nicht geladen werden.'
     console.error(err)
   } finally {
-    loading.value = false
+    if (requestId === sessionsRequestId) loading.value = false
   }
 }
 
 const openSessionPopup = async (session: Session) => {
+  const requestId = ++resultsRequestId
   popupVisible.value = true
   popupLoading.value = true
   popupError.value = null
@@ -100,24 +111,41 @@ const openSessionPopup = async (session: Session) => {
   sessionResults.value = []
 
   try {
-    const result: any = await getSessionResults(session.id)
-    console.log('Session Results:', result)
-    sessionResults.value = Array.isArray(result) 
-        ? result 
-        : result.classifications ?? []
+    const result = await getSessionResults(session.id)
+    if (requestId !== resultsRequestId) return
+    sessionResults.value = result.classifications
+
+    for (const { driver_id } of result.classifications) {
+      void getSeasonDriver(props.season, driver_id)
+        .then((profile) => {
+          if (requestId !== resultsRequestId) return
+          driverProfiles.value = { ...driverProfiles.value, [driver_id]: profile }
+        })
+        .catch(() => {
+          // Der Fahrer bleibt über seine ID auffindbar, auch wenn sein Profil fehlt.
+        })
+    }
   } catch (err) {
+    if (requestId !== resultsRequestId) return
     popupError.value = 'Ergebnisse konnten nicht geladen werden.'
     console.error(err)
   } finally {
-    popupLoading.value = false
+    if (requestId === resultsRequestId) popupLoading.value = false
   }
 }
 
 const closeSessionPopup = () => {
+  resultsRequestId++
   popupVisible.value = false
   popupError.value = null
   popupSession.value = null
   sessionResults.value = []
+  driverProfiles.value = {}
+  selectedDriverId.value = null
+}
+
+const getDriverLabel = (driverId: number): string => {
+  return driverProfiles.value[driverId]?.full_name ?? `Fahrer #${driverId}`
 }
 
 // Lädt Sessions beim initialen Mount
@@ -216,8 +244,8 @@ watch(() => props.weekend.id, loadSessions)
     </section>
 
     <!-- Session Results Popup -->
-    <div v-if="popupVisible" class="session-results-popup">
-        <div class="session-results-popup__container">
+    <div v-if="popupVisible" class="session-results-popup" @click="closeSessionPopup">
+        <div class="session-results-popup__container" @click.stop>
             <div class="session-results-popup__header">
             <h3 class="session-results-popup__title">
                 Ergebnisse für {{ popupSession ? getSessionTypeName(popupSession.type) : 'Session' }}
@@ -254,7 +282,11 @@ watch(() => props.weekend.id, loadSessions)
                 </div>
 
                 <div class="driver-id">
-                #{{ driver.driver_id }}
+                  <button
+                    class="driver-id__link"
+                    type="button"
+                    @click="selectedDriverId = driver.driver_id"
+                  >{{ getDriverLabel(driver.driver_id) }}</button>
                 </div>
 
                 <div>
@@ -286,6 +318,13 @@ watch(() => props.weekend.id, loadSessions)
             
         </div>
     </div>
+
+    <DriverDetailsModal
+      :open="selectedDriverId !== null"
+      :season="season"
+      :driver-id="selectedDriverId"
+      @close="selectedDriverId = null"
+    />
   </div>
 </template>
 
@@ -679,6 +718,28 @@ watch(() => props.weekend.id, loadSessions)
   font-weight: 600;
 
   color: rgba(255, 255, 255, 0.85);
+}
+
+.driver-id__link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.driver-id__link:hover,
+.driver-id__link:focus-visible {
+  color: #ff746e;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.driver-id__link:disabled {
+  cursor: default;
+  text-decoration: none;
 }
 
 

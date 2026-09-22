@@ -12,10 +12,6 @@ const routes = [
     path: '/results',
     name: 'Results',
     component: Results,
-    props: route => ({
-      season: route.query.season ? Number(route.query.season) : null,
-      weekend: route.query.weekend ? Number(route.query.weekend) : null
-    })
   }
 ]
 

@@ -39,22 +39,56 @@ export interface Session {
   start_time: string
 }
 
-/** Ein Rückgabe-Objekt für Session-Ergebnisse; kann je nach Backend leicht variieren. */
-export interface SessionResultEntry {
-  id?: number
-  driver_name?: string
-  driverName?: string
-  name?: string
-  full_name?: string
-  team?: string | { name?: string; full_name?: string } | null
-  team_name?: string
-  position?: number | string
-  rank?: number | string
-  points?: number | string
-  score?: number | string
-  total_points?: number | string
-  points_total?: number | string
-  data_points?: number | string
-  value?: number | string
-  [key: string]: unknown
+/** Stammdaten eines Fahrers innerhalb einer Saison. */
+export interface Driver {
+  driver_id: number
+  full_name: string
+  first_name: string
+  last_name: string
+  acronym: string
+  team_name: string
+  portrait_base64: string
+}
+
+/** Ein Platz in der Fahrerweltmeisterschaft. */
+export interface DriverStanding {
+  position: number
+  driver_id: number
+  points: number
+}
+
+/** Fahrerweltmeisterschaft einer Saison. */
+export interface DriverStandings {
+  season: number
+  standings: DriverStanding[]
+}
+
+/** Ein Platz in der Teamweltmeisterschaft. */
+export interface TeamStanding {
+  position: number
+  team_name: string
+  points: number
+}
+
+/** Teamweltmeisterschaft einer Saison. */
+export interface TeamStandings {
+  season: number
+  standings: TeamStanding[]
+}
+
+/** Ergebnis eines einzelnen Fahrers in einer Session. */
+export interface SessionClassification {
+  position: number
+  driver_id: number
+  status: string
+  time: number | null
+  laps_completed: number
+  gap_to_leader: number | null
+  gap_to_front: number | null
+}
+
+/** Klassifikationen einer Session. */
+export interface SessionResult {
+  session_id: number
+  classifications: SessionClassification[]
 }
