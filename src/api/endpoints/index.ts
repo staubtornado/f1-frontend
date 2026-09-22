@@ -1,5 +1,12 @@
 import { apiClient } from '../client'
-import type { RaceWeekend, Session } from '../types'
+import type {
+  Driver,
+  DriverStandings,
+  RaceWeekend,
+  Session,
+  SessionResult,
+  TeamStandings,
+} from '../types'
 
 /**
  * Alle verfügbaren Saisons abrufen
@@ -29,4 +36,20 @@ export function getWeekends(year: number) {
  */
 export function getSessions(weekendId: number) {
   return apiClient<Session[]>(`/weekend/${weekendId}/sessions/`)
+}
+
+export function getSessionResults(sessionId: number) {
+  return apiClient<SessionResult>(`/session/${sessionId}/result/`)
+}
+
+export function getDriverStandings(season: number) {
+  return apiClient<DriverStandings>(`/standings/${season}/driver_standings/`)
+}
+
+export function getTeamStandings(season: number) {
+  return apiClient<TeamStandings>(`/standings/${season}/team_standings/`)
+}
+
+export function getSeasonDriver(season: number, driverId: number) {
+  return apiClient<Driver>(`/seasons/${season}/drivers/${driverId}/`)
 }

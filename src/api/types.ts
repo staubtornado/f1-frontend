@@ -38,3 +38,57 @@ export interface Session {
   weekend_id: number
   start_time: string
 }
+
+/** Stammdaten eines Fahrers innerhalb einer Saison. */
+export interface Driver {
+  driver_id: number
+  full_name: string
+  first_name: string
+  last_name: string
+  acronym: string
+  team_name: string
+  portrait_base64: string
+}
+
+/** Ein Platz in der Fahrerweltmeisterschaft. */
+export interface DriverStanding {
+  position: number
+  driver_id: number
+  points: number
+}
+
+/** Fahrerweltmeisterschaft einer Saison. */
+export interface DriverStandings {
+  season: number
+  standings: DriverStanding[]
+}
+
+/** Ein Platz in der Teamweltmeisterschaft. */
+export interface TeamStanding {
+  position: number
+  team_name: string
+  points: number
+}
+
+/** Teamweltmeisterschaft einer Saison. */
+export interface TeamStandings {
+  season: number
+  standings: TeamStanding[]
+}
+
+/** Ergebnis eines einzelnen Fahrers in einer Session. */
+export interface SessionClassification {
+  position: number
+  driver_id: number
+  status: string
+  time: number | null
+  laps_completed: number
+  gap_to_leader: number | null
+  gap_to_front: number | null
+}
+
+/** Klassifikationen einer Session. */
+export interface SessionResult {
+  session_id: number
+  classifications: SessionClassification[]
+}
