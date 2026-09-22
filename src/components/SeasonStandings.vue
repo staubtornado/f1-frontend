@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import { getDriverStandings, getSeasonDriver } from '../api/endpoints'
-import type { Driver, DriverStanding } from '../api/types'
+import { onMounted, ref, watch } from 'vue'
+import { getDriverStandings, getSeasonDriver, getTeamStandings } from '../api/endpoints'
+import type { Driver, DriverStanding, TeamStanding } from '../api/types'
 
 interface Props {
   season: number
@@ -11,31 +11,14 @@ interface DriverStandingRow extends DriverStanding {
   driver: Driver | null
 }
 
-interface TeamStandingRow {
-  position: number
-  name: string
-  points: number
-}
-
 const props = defineProps<Props>()
 
 const driverRows = ref<DriverStandingRow[]>([])
+const teamRows = ref<TeamStanding[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
+const teamError = ref<string | null>(null)
 let loadRequestId = 0
-
-const teamRows = computed<TeamStandingRow[]>(() => {
-  const pointsByTeam = new Map<string, number>()
-
-  for (const row of driverRows.value) {
-    const teamName = row.driver?.team_name ?? 'Unbekanntes Team'
-    pointsByTeam.set(teamName, (pointsByTeam.get(teamName) ?? 0) + row.points)
-  }
-
-  return [...pointsByTeam.entries()]
-    .sort(([, firstPoints], [, secondPoints]) => secondPoints - firstPoints)
-    .map(([name, points], index) => ({ position: index + 1, name, points }))
-})
 
 const getDriverLabel = (row: DriverStandingRow): string => {
   return row.driver?.full_name ?? `Fahrer #${row.driver_id}`
@@ -49,10 +32,21 @@ const loadStandings = async () => {
   const requestId = ++loadRequestId
   loading.value = true
   error.value = null
+  teamError.value = null
   driverRows.value = []
+  teamRows.value = []
 
   try {
-    const standings = await getDriverStandings(props.season)
+    const [standings, teamStandings] = await Promise.all([
+      getDriverStandings(props.season),
+      getTeamStandings(props.season).catch((caughtError: unknown) => {
+        if (requestId === loadRequestId) {
+          teamError.value = 'Teamwertung konnte nicht geladen werden.'
+          console.error(caughtError)
+        }
+        return null
+      }),
+    ])
     const rows = await Promise.all(
       standings.standings.map(async (standing): Promise<DriverStandingRow> => {
         try {
@@ -67,6 +61,9 @@ const loadStandings = async () => {
     if (requestId !== loadRequestId) return
 
     driverRows.value = rows.sort((first, second) => first.position - second.position)
+    teamRows.value = (teamStandings?.standings ?? [])
+      .slice()
+      .sort((first, second) => first.position - second.position)
   } catch (caughtError) {
     if (requestId !== loadRequestId) return
 
@@ -91,7 +88,7 @@ watch(() => props.season, loadStandings)
     <p v-if="loading" class="standings__status">Weltmeisterschaft wird geladen…</p>
     <p v-else-if="error" class="standings__status standings__status--error">{{ error }}</p>
 
-    <div v-else-if="driverRows.length > 0" class="standings__grid">
+    <div v-else-if="driverRows.length > 0 || teamRows.length > 0 || teamError" class="standings__grid">
       <section class="standings-card" aria-labelledby="drivers-title">
         <h2 id="drivers-title" class="standings-card__title">Fahrer</h2>
         <table class="standings-table">
@@ -117,7 +114,9 @@ watch(() => props.season, loadStandings)
 
       <section class="standings-card" aria-labelledby="teams-title">
         <h2 id="teams-title" class="standings-card__title">Teams</h2>
-        <table class="standings-table">
+        <p v-if="teamError" class="standings__status standings__status--error">{{ teamError }}</p>
+        <p v-else-if="teamRows.length === 0" class="standings__status">Keine Teamwertung verfügbar.</p>
+        <table v-else class="standings-table">
           <thead>
             <tr>
               <th scope="col">Pos.</th>
@@ -126,9 +125,9 @@ watch(() => props.season, loadStandings)
             </tr>
           </thead>
           <tbody>
-            <tr v-for="team in teamRows" :key="team.name">
+            <tr v-for="team in teamRows" :key="team.team_name">
               <td class="standings-table__position">{{ team.position }}</td>
-              <td class="standings-table__name">{{ team.name }}</td>
+              <td class="standings-table__name">{{ team.team_name }}</td>
               <td class="standings-table__points">{{ team.points }} PTS</td>
             </tr>
           </tbody>

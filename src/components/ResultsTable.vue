@@ -12,7 +12,7 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
 import { getSessionResults, getSessions } from '../api/endpoints'
-import type { Session, RaceWeekend } from '../api/types'
+import type { Session, RaceWeekend, SessionClassification } from '../api/types'
 
 interface Props {
   weekend: RaceWeekend
@@ -27,7 +27,9 @@ const popupVisible = ref(false)
 const popupLoading = ref(false)
 const popupError = ref<string | null>(null)
 const popupSession = ref<Session | null>(null)
-const sessionResults = ref<any[]>([])
+const sessionResults = ref<SessionClassification[]>([])
+let sessionsRequestId = 0
+let resultsRequestId = 0
 
 /**
  * Konvertiert den Session-Typ in einen lesbaren deutschen Namen
@@ -80,19 +82,24 @@ const formatDate = (timeStr: string): string => {
  * Lädt Sessions vom Backend, wenn die Komponente geladen oder das Wochenende gewechselt wird
  */
 const loadSessions = async () => {
+  const requestId = ++sessionsRequestId
   loading.value = true
   error.value = null
   try {
-    sessions.value = await getSessions(props.weekend.id)
+    const loadedSessions = await getSessions(props.weekend.id)
+    if (requestId !== sessionsRequestId) return
+    sessions.value = loadedSessions
   } catch (err) {
+    if (requestId !== sessionsRequestId) return
     error.value = 'Sessions konnten nicht geladen werden.'
     console.error(err)
   } finally {
-    loading.value = false
+    if (requestId === sessionsRequestId) loading.value = false
   }
 }
 
 const openSessionPopup = async (session: Session) => {
+  const requestId = ++resultsRequestId
   popupVisible.value = true
   popupLoading.value = true
   popupError.value = null
@@ -100,20 +107,20 @@ const openSessionPopup = async (session: Session) => {
   sessionResults.value = []
 
   try {
-    const result: any = await getSessionResults(session.id)
-    console.log('Session Results:', result)
-    sessionResults.value = Array.isArray(result) 
-        ? result 
-        : result.classifications ?? []
+    const result = await getSessionResults(session.id)
+    if (requestId !== resultsRequestId) return
+    sessionResults.value = result.classifications
   } catch (err) {
+    if (requestId !== resultsRequestId) return
     popupError.value = 'Ergebnisse konnten nicht geladen werden.'
     console.error(err)
   } finally {
-    popupLoading.value = false
+    if (requestId === resultsRequestId) popupLoading.value = false
   }
 }
 
 const closeSessionPopup = () => {
+  resultsRequestId++
   popupVisible.value = false
   popupError.value = null
   popupSession.value = null
