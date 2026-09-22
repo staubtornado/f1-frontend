@@ -10,7 +10,7 @@
  */
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { getSeasonDriver, getSessionResults, getSessions } from '../api/endpoints'
 import type { Driver, Session, RaceWeekend, SessionClassification } from '../api/types'
 import DriverDetailsModal from './DriverDetailsModal.vue'
@@ -34,6 +34,8 @@ const driverProfiles = ref<Record<number, Driver>>({})
 const selectedDriverId = ref<number | null>(null)
 let sessionsRequestId = 0
 let resultsRequestId = 0
+let sessionsController: AbortController | null = null
+let resultsController: AbortController | null = null
 
 /**
  * Konvertiert den Session-Typ in einen lesbaren deutschen Namen
@@ -86,15 +88,18 @@ const formatDate = (timeStr: string): string => {
  * Lädt Sessions vom Backend, wenn die Komponente geladen oder das Wochenende gewechselt wird
  */
 const loadSessions = async () => {
+  sessionsController?.abort()
+  const controller = new AbortController()
+  sessionsController = controller
   const requestId = ++sessionsRequestId
   loading.value = true
   error.value = null
   try {
-    const loadedSessions = await getSessions(props.weekend.id)
-    if (requestId !== sessionsRequestId) return
+    const loadedSessions = await getSessions(props.weekend.id, controller.signal)
+    if (controller.signal.aborted || requestId !== sessionsRequestId) return
     sessions.value = loadedSessions
   } catch (err) {
-    if (requestId !== sessionsRequestId) return
+    if (controller.signal.aborted || requestId !== sessionsRequestId) return
     error.value = 'Sessions konnten nicht geladen werden.'
     console.error(err)
   } finally {
@@ -103,6 +108,9 @@ const loadSessions = async () => {
 }
 
 const openSessionPopup = async (session: Session) => {
+  resultsController?.abort()
+  const controller = new AbortController()
+  resultsController = controller
   const requestId = ++resultsRequestId
   popupVisible.value = true
   popupLoading.value = true
@@ -111,12 +119,12 @@ const openSessionPopup = async (session: Session) => {
   sessionResults.value = []
 
   try {
-    const result = await getSessionResults(session.id)
-    if (requestId !== resultsRequestId) return
+    const result = await getSessionResults(session.id, controller.signal)
+    if (controller.signal.aborted || requestId !== resultsRequestId) return
     sessionResults.value = result.classifications
 
     for (const { driver_id } of result.classifications) {
-      void getSeasonDriver(props.season, driver_id)
+      void getSeasonDriver(props.season, driver_id, controller.signal)
         .then((profile) => {
           if (requestId !== resultsRequestId) return
           driverProfiles.value = { ...driverProfiles.value, [driver_id]: profile }
@@ -136,6 +144,7 @@ const openSessionPopup = async (session: Session) => {
 
 const closeSessionPopup = () => {
   resultsRequestId++
+  resultsController?.abort()
   popupVisible.value = false
   popupError.value = null
   popupSession.value = null
@@ -153,6 +162,12 @@ onMounted(loadSessions)
 
 // Lädt Sessions neu, wenn sich das Wochenende ändert
 watch(() => props.weekend.id, loadSessions)
+onBeforeUnmount(() => {
+  sessionsRequestId++
+  resultsRequestId++
+  sessionsController?.abort()
+  resultsController?.abort()
+})
 </script>
 
 <template>

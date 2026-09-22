@@ -18,7 +18,7 @@
  */
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { getSeasons, getWeekends } from '../api/endpoints'
 import type { RaceWeekend } from '../api/types'
@@ -36,6 +36,8 @@ const selectedWeekendId = ref<number | null>(null)
 const loading = ref(true)
 const error = ref<string | null>(null)
 let weekendRequestId = 0
+let seasonsController: AbortController | null = null
+let weekendsController: AbortController | null = null
 
 // Sortiert Saisons in absteigender Reihenfolge (neueste zuerst)
 const sortedSeasons = computed(() => [...seasons.value].sort((a, b) => b - a))
@@ -57,8 +59,9 @@ const selectedWeekend = computed(() =>
  * 3. Setzt die erste Saison als Standard, wenn keine in URL vorhanden
  */
 onMounted(async () => {
+  seasonsController = new AbortController()
   try {
-    seasons.value = await getSeasons()
+    seasons.value = await getSeasons(seasonsController.signal)
     
     // URL prüfen
     const seasonQuery = Array.isArray(route.query.season)
@@ -74,7 +77,7 @@ onMounted(async () => {
     error.value = 'Saisons konnten nicht geladen werden.'
     console.error(err)
   } finally {
-    loading.value = false
+    if (!seasonsController.signal.aborted) loading.value = false
   }
 })
 
@@ -88,6 +91,9 @@ onMounted(async () => {
 watch(selectedSeason, async (newSeason) => {
   if (newSeason === null) return
 
+  weekendsController?.abort()
+  const controller = new AbortController()
+  weekendsController = controller
   const requestId = ++weekendRequestId
   selectedWeekendId.value = null
   weekends.value = []
@@ -96,17 +102,22 @@ watch(selectedSeason, async (newSeason) => {
   void router.replace({ name: 'Results', query: { season: String(newSeason) } })
 
   try {
-    const loadedWeekends = await getWeekends(newSeason)
+    const loadedWeekends = await getWeekends(newSeason, controller.signal)
 
-    if (requestId !== weekendRequestId) return
+    if (controller.signal.aborted || requestId !== weekendRequestId) return
 
     weekends.value = loadedWeekends
   } catch (err) {
-    if (requestId !== weekendRequestId) return
+    if (controller.signal.aborted || requestId !== weekendRequestId) return
 
     error.value = 'Rennwochenenden konnten nicht geladen werden.'
     console.error(err)
   }
+})
+
+onBeforeUnmount(() => {
+  seasonsController?.abort()
+  weekendsController?.abort()
 })
 
 watch(
