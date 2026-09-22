@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ApiError } from '../api/client'
 import { getDriverStandings, getSeasonDriver, getTeamStandings } from '../api/endpoints'
 import type { Driver, DriverStanding, TeamStanding } from '../api/types'
@@ -22,6 +22,7 @@ const teamLoading = ref(true)
 const error = ref<string | null>(null)
 const teamError = ref<string | null>(null)
 let loadRequestId = 0
+let standingsController: AbortController | null = null
 const selectedDriverId = ref<number | null>(null)
 
 const getDriverLabel = (row: DriverStandingRow): string => {
@@ -33,6 +34,9 @@ const getTeamLabel = (row: DriverStandingRow): string => {
 }
 
 const loadStandings = async () => {
+  standingsController?.abort()
+  const controller = new AbortController()
+  standingsController = controller
   const requestId = ++loadRequestId
   loading.value = true
   teamLoading.value = true
@@ -41,7 +45,7 @@ const loadStandings = async () => {
   driverRows.value = []
   teamRows.value = []
 
-  void getTeamStandings(props.season)
+  void getTeamStandings(props.season, controller.signal)
     .then((teamStandings) => {
       if (requestId !== loadRequestId) return
       teamRows.value = teamStandings.standings
@@ -60,7 +64,7 @@ const loadStandings = async () => {
     })
 
   try {
-    const standings = await getDriverStandings(props.season)
+    const standings = await getDriverStandings(props.season, controller.signal)
     const rows: DriverStandingRow[] = standings.standings
       .map((standing) => ({ ...standing, driver: null }))
       .sort((first, second) => first.position - second.position)
@@ -73,7 +77,7 @@ const loadStandings = async () => {
     loading.value = false
 
     for (const row of rows) {
-      void getSeasonDriver(props.season, row.driver_id)
+      void getSeasonDriver(props.season, row.driver_id, controller.signal)
         .then((driver) => {
           if (requestId !== loadRequestId) return
           driverRows.value = driverRows.value.map((currentRow) =>
@@ -98,6 +102,10 @@ const loadStandings = async () => {
 
 onMounted(loadStandings)
 watch(() => props.season, loadStandings)
+onBeforeUnmount(() => {
+  loadRequestId++
+  standingsController?.abort()
+})
 </script>
 
 <template>

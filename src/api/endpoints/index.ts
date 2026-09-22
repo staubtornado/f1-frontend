@@ -14,8 +14,8 @@ import type {
  * @endpoint GET /seasons/
  * @returns Sortierte Liste von Jahreszahlen
  */
-export function getSeasons() {
-  return apiClient<number[]>('/seasons/')
+export function getSeasons(signal?: AbortSignal) {
+  return apiClient<number[]>('/seasons/', { signal })
 }
 
 /**
@@ -24,8 +24,8 @@ export function getSeasons() {
  * @endpoint GET /seasons/{year}/weekends/
  * @param year - Saison-Jahr
  */
-export function getWeekends(year: number) {
-  return apiClient<RaceWeekend[]>(`/seasons/${year}/weekends/`)
+export function getWeekends(year: number, signal?: AbortSignal) {
+  return apiClient<RaceWeekend[]>(`/seasons/${year}/weekends/`, { signal })
 }
 
 /**
@@ -34,22 +34,26 @@ export function getWeekends(year: number) {
  * @endpoint GET /weekend/{weekendId}/sessions/
  * @param weekendId - Race Weekend ID
  */
-export function getSessions(weekendId: number) {
-  return apiClient<Session[]>(`/weekend/${weekendId}/sessions/`)
+export function getSessions(weekendId: number, signal?: AbortSignal) {
+  return apiClient<Session[]>(`/weekend/${weekendId}/sessions/`, { signal })
 }
 
-export function getSessionResults(sessionId: number) {
-  return apiClient<SessionResult>(`/session/${sessionId}/result/`)
+export function getSessionResults(sessionId: number, signal?: AbortSignal) {
+  return apiClient<SessionResult>(`/session/${sessionId}/result/`, { signal })
 }
 
-export function getDriverStandings(season: number) {
-  return apiClient<DriverStandings>(`/standings/${season}/driver_standings/`)
+export function getDriverStandings(season: number, signal?: AbortSignal) {
+  return apiClient<DriverStandings>(`/standings/${season}/driver_standings/`, { signal })
 }
 
-export function getTeamStandings(season: number) {
-  return apiClient<TeamStandings>(`/standings/${season}/team_standings/`)
+export function getTeamStandings(season: number, signal?: AbortSignal) {
+  return apiClient<TeamStandings>(`/standings/${season}/team_standings/`, { signal })
 }
 
-export function getSeasonDriver(season: number, driverId: number) {
-  return apiClient<Driver>(`/seasons/${season}/drivers/${driverId}/`)
+export function getSeasonDriver(season: number, driverId: number, signal?: AbortSignal) {
+  return apiClient<Driver>(`/seasons/${season}/drivers/${driverId}/`, { signal })
 }
+
+//export function getStartingGrid(sessionId: number) {
+  //return apiClient<StartingGrid>(`/session/${sessionId}/starting_grid/`)
+//}
