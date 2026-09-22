@@ -39,6 +39,30 @@ export interface Session {
   start_time: string
 }
 
+/** Stammdaten eines Fahrers innerhalb einer Saison. */
+export interface Driver {
+  driver_id: number
+  full_name: string
+  first_name: string
+  last_name: string
+  acronym: string
+  team_name: string
+  portrait_base64: string
+}
+
+/** Ein Platz in der Fahrerweltmeisterschaft. */
+export interface DriverStanding {
+  position: number
+  driver_id: number
+  points: number
+}
+
+/** Fahrerweltmeisterschaft einer Saison. */
+export interface DriverStandings {
+  season: number
+  standings: DriverStanding[]
+}
+
 /** Ein Rückgabe-Objekt für Session-Ergebnisse; kann je nach Backend leicht variieren. */
 export interface SessionResultEntry {
   id?: number
