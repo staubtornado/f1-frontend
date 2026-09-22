@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
+import { ApiError } from '../api/client'
 import { getDriverStandings, getSeasonDriver, getTeamStandings } from '../api/endpoints'
 import type { Driver, DriverStanding, TeamStanding } from '../api/types'
 import DriverDetailsModal from './DriverDetailsModal.vue'
@@ -17,6 +18,7 @@ const props = defineProps<Props>()
 const driverRows = ref<DriverStandingRow[]>([])
 const teamRows = ref<TeamStanding[]>([])
 const loading = ref(true)
+const teamLoading = ref(true)
 const error = ref<string | null>(null)
 const teamError = ref<string | null>(null)
 let loadRequestId = 0
@@ -33,43 +35,61 @@ const getTeamLabel = (row: DriverStandingRow): string => {
 const loadStandings = async () => {
   const requestId = ++loadRequestId
   loading.value = true
+  teamLoading.value = true
   error.value = null
   teamError.value = null
   driverRows.value = []
   teamRows.value = []
 
+  void getTeamStandings(props.season)
+    .then((teamStandings) => {
+      if (requestId !== loadRequestId) return
+      teamRows.value = teamStandings.standings
+        .slice()
+        .sort((first, second) => first.position - second.position)
+    })
+    .catch((caughtError: unknown) => {
+      if (requestId !== loadRequestId) return
+      teamError.value = caughtError instanceof ApiError && caughtError.status === 404
+        ? 'Teamwertungs-Endpunkt im Backend nicht gefunden (404). Bitte Backend aktualisieren.'
+        : 'Teamwertung konnte nicht geladen werden.'
+      console.error(caughtError)
+    })
+    .finally(() => {
+      if (requestId === loadRequestId) teamLoading.value = false
+    })
+
   try {
-    const [standings, teamStandings] = await Promise.all([
-      getDriverStandings(props.season),
-      getTeamStandings(props.season).catch((caughtError: unknown) => {
-        if (requestId === loadRequestId) {
-          teamError.value = 'Teamwertung konnte nicht geladen werden.'
-          console.error(caughtError)
-        }
-        return null
-      }),
-    ])
-    const rows = await Promise.all(
-      standings.standings.map(async (standing): Promise<DriverStandingRow> => {
-        try {
-          const driver = await getSeasonDriver(props.season, standing.driver_id)
-          return { ...standing, driver }
-        } catch {
-          return { ...standing, driver: null }
-        }
-      }),
-    )
+    const standings = await getDriverStandings(props.season)
+    const rows: DriverStandingRow[] = standings.standings
+      .map((standing) => ({ ...standing, driver: null }))
+      .sort((first, second) => first.position - second.position)
 
     if (requestId !== loadRequestId) return
 
-    driverRows.value = rows.sort((first, second) => first.position - second.position)
-    teamRows.value = (teamStandings?.standings ?? [])
-      .slice()
-      .sort((first, second) => first.position - second.position)
+    // Zeige Positionen und Punkte sofort; Profilbilder und Namen kommen separat
+    // über den langsameren Driver-Detail-Endpunkt.
+    driverRows.value = rows
+    loading.value = false
+
+    for (const row of rows) {
+      void getSeasonDriver(props.season, row.driver_id)
+        .then((driver) => {
+          if (requestId !== loadRequestId) return
+          driverRows.value = driverRows.value.map((currentRow) =>
+            currentRow.driver_id === row.driver_id ? { ...currentRow, driver } : currentRow,
+          )
+        })
+        .catch(() => {
+          // IDs bleiben als klickbare Fallbacks verfügbar, auch wenn ein Profil fehlt.
+        })
+    }
   } catch (caughtError) {
     if (requestId !== loadRequestId) return
 
-    error.value = 'Weltmeisterschaft konnte nicht geladen werden.'
+    error.value = caughtError instanceof ApiError && caughtError.status === 404
+      ? 'Fahrerwertungs-Endpunkt im Backend nicht gefunden (404). Bitte Backend aktualisieren.'
+      : 'Weltmeisterschaft konnte nicht geladen werden.'
     console.error(caughtError)
   } finally {
     if (requestId === loadRequestId) loading.value = false
@@ -87,13 +107,17 @@ watch(() => props.season, loadStandings)
       <h1 id="standings-title" class="standings__title">Weltmeisterschaft</h1>
     </header>
 
-    <p v-if="loading" class="standings__status">Weltmeisterschaft wird geladen…</p>
-    <p v-else-if="error" class="standings__status standings__status--error">{{ error }}</p>
+    <p v-if="loading && driverRows.length === 0 && teamRows.length === 0" class="standings__status">
+      Weltmeisterschaft wird geladen…
+    </p>
 
-    <div v-else-if="driverRows.length > 0 || teamRows.length > 0 || teamError" class="standings__grid">
+    <div v-else-if="driverRows.length > 0 || teamRows.length > 0 || error || teamError || teamLoading" class="standings__grid">
       <section class="standings-card" aria-labelledby="drivers-title">
         <h2 id="drivers-title" class="standings-card__title">Fahrer</h2>
-        <table class="standings-table">
+        <p v-if="error" class="standings__status standings__status--error">{{ error }}</p>
+        <p v-else-if="loading" class="standings__status">Fahrerwertung wird geladen…</p>
+        <p v-else-if="driverRows.length === 0" class="standings__status">Keine Fahrerwertung verfügbar.</p>
+        <table v-else class="standings-table">
           <thead>
             <tr>
               <th scope="col">Pos.</th>
@@ -108,7 +132,6 @@ watch(() => props.season, loadStandings)
                 <button
                   class="standings-table__name standings-table__driver-link"
                   type="button"
-                  :disabled="!row.driver"
                   @click="selectedDriverId = row.driver_id"
                 >{{ getDriverLabel(row) }}</button>
                 <span class="standings-table__team"> | {{ getTeamLabel(row) }}</span>
@@ -122,6 +145,7 @@ watch(() => props.season, loadStandings)
       <section class="standings-card" aria-labelledby="teams-title">
         <h2 id="teams-title" class="standings-card__title">Teams</h2>
         <p v-if="teamError" class="standings__status standings__status--error">{{ teamError }}</p>
+        <p v-else-if="teamLoading" class="standings__status">Teamwertung wird geladen…</p>
         <p v-else-if="teamRows.length === 0" class="standings__status">Keine Teamwertung verfügbar.</p>
         <table v-else class="standings-table">
           <thead>

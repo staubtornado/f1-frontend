@@ -115,16 +115,15 @@ const openSessionPopup = async (session: Session) => {
     if (requestId !== resultsRequestId) return
     sessionResults.value = result.classifications
 
-    const profiles = await Promise.all(result.classifications.map(async ({ driver_id }) => {
-      try {
-        return [driver_id, await getSeasonDriver(props.season, driver_id)] as const
-      } catch {
-        return null
-      }
-    }))
-
-    if (requestId === resultsRequestId) {
-      driverProfiles.value = Object.fromEntries(profiles.filter((profile) => profile !== null))
+    for (const { driver_id } of result.classifications) {
+      void getSeasonDriver(props.season, driver_id)
+        .then((profile) => {
+          if (requestId !== resultsRequestId) return
+          driverProfiles.value = { ...driverProfiles.value, [driver_id]: profile }
+        })
+        .catch(() => {
+          // Der Fahrer bleibt über seine ID auffindbar, auch wenn sein Profil fehlt.
+        })
     }
   } catch (err) {
     if (requestId !== resultsRequestId) return
@@ -286,7 +285,6 @@ watch(() => props.weekend.id, loadSessions)
                   <button
                     class="driver-id__link"
                     type="button"
-                    :disabled="!driverProfiles[driver.driver_id]"
                     @click="selectedDriverId = driver.driver_id"
                   >{{ getDriverLabel(driver.driver_id) }}</button>
                 </div>
