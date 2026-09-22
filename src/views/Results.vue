@@ -24,6 +24,7 @@ import { getSeasons, getWeekends } from '../api/endpoints'
 import type { RaceWeekend } from '../api/types'
 import ResultsSidebar from '../components/ResultsSidebar.vue'
 import ResultsTable from '../components/ResultsTable.vue'
+import SeasonStandings from '../components/SeasonStandings.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -34,6 +35,7 @@ const weekends = ref<RaceWeekend[]>([])
 const selectedWeekendId = ref<number | null>(null)
 const loading = ref(true)
 const error = ref<string | null>(null)
+let weekendRequestId = 0
 
 // Sortiert Saisons in absteigender Reihenfolge (neueste zuerst)
 const sortedSeasons = computed(() => [...seasons.value].sort((a, b) => b - a))
@@ -58,8 +60,11 @@ onMounted(async () => {
   try {
     seasons.value = await getSeasons()
     
-    // Prüft die URL nach einer Saison (z.B. ?season=2024)
-    const seasonParam = route.query.season ? Number(route.query.season) : null
+    // URL prüfen
+    const seasonQuery = Array.isArray(route.query.season)
+      ? route.query.season[0]
+      : route.query.season
+    const seasonParam = seasonQuery ? Number(seasonQuery) : null
     if (seasonParam && seasons.value.includes(seasonParam)) {
       selectedSeason.value = seasonParam
     } else if (sortedSeasons.value.length > 0) {
@@ -81,18 +86,44 @@ onMounted(async () => {
  * 3. Aktualisiert die URL
  */
 watch(selectedSeason, async (newSeason) => {
-  if (newSeason) {
-    try {
-      weekends.value = await getWeekends(newSeason)
-      selectedWeekendId.value = null
-      // Aktualisiert die URL ohne die Seite neu zu laden
-      router.replace({ query: { season: newSeason } })
-    } catch (err) {
-      error.value = 'Rennwochenenden konnten nicht geladen werden.'
-      console.error(err)
-    }
+  if (newSeason === null) return
+
+  const requestId = ++weekendRequestId
+  selectedWeekendId.value = null
+  weekends.value = []
+  error.value = null
+
+  void router.replace({ name: 'Results', query: { season: String(newSeason) } })
+
+  try {
+    const loadedWeekends = await getWeekends(newSeason)
+
+    if (requestId !== weekendRequestId) return
+
+    weekends.value = loadedWeekends
+  } catch (err) {
+    if (requestId !== weekendRequestId) return
+
+    error.value = 'Rennwochenenden konnten nicht geladen werden.'
+    console.error(err)
   }
 })
+
+watch(
+  () => route.query.season,
+  (seasonQuery) => {
+    const rawSeason = Array.isArray(seasonQuery) ? seasonQuery[0] : seasonQuery
+    const season = rawSeason ? Number(rawSeason) : null
+
+    if (season !== null && seasons.value.includes(season) && season !== selectedSeason.value) {
+      selectedSeason.value = season
+    }
+  },
+)
+
+const selectSeason = (season: number) => {
+  selectedSeason.value = season
+}
 
 /**
  * Navigiert zurück zur Startseite (Home)
@@ -111,7 +142,7 @@ const goHome = () => {
       :selected-weekend-id="selectedWeekendId"
       :loading="loading"
       :error="error"
-      @select-season="selectedSeason = $event"
+      @select-season="selectSeason"
       @select-weekend="selectedWeekendId = $event"
       @go-home="goHome"
     />
@@ -120,6 +151,10 @@ const goHome = () => {
       <ResultsTable
         v-if="selectedWeekendId && selectedWeekend"
         :weekend="selectedWeekend"
+      />
+      <SeasonStandings
+        v-else-if="selectedSeason !== null"
+        :season="selectedSeason"
       />
       <div v-else class="results-page__empty">
         <p>Wählen Sie ein Rennwochenende aus der Seitenleiste</p>
