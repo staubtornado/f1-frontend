@@ -20,6 +20,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { getApiErrorMessage } from '../api/client'
 import { getSeasons, getWeekends } from '../api/endpoints'
 import type { RaceWeekend, Session } from '../api/types'
 import ResultsSidebar from '../components/ResultsSidebar.vue'
@@ -36,9 +37,9 @@ const weekends = ref<RaceWeekend[]>([])
 const selectedWeekendId = ref<number | null>(null)
 const startingGridSession = ref<Session | null>(null)
 const weekendsStatus = ref<'idle' | 'loading' | 'loaded' | 'error'>('idle')
-const loading = ref(true)
-const error = ref<string | null>(null)
-let weekendRequestId = 0
+const seasonsLoading = ref(true)
+const seasonsError = ref<string | null>(null)
+const weekendsError = ref<string | null>(null)
 let seasonsController: AbortController | null = null
 let weekendsController: AbortController | null = null
 
@@ -55,34 +56,50 @@ const selectedWeekend = computed(() =>
   weekends.value.find(w => w.id === selectedWeekendId.value)
 )
 
-/**
- * Beim initialen Laden:
- * 1. Lädt alle verfügbaren Saisons
- * 2. Prüft ob eine Saison in der URL übergeben wurde
- * 3. Setzt die erste Saison als Standard, wenn keine in URL vorhanden
- */
-onMounted(async () => {
+const loadSeasons = async (): Promise<number[] | null> => {
+  seasonsController?.abort()
   seasonsController = new AbortController()
+  const { signal } = seasonsController
+  seasonsLoading.value = true
+  seasonsError.value = null
+
   try {
-    seasons.value = await getSeasons(seasonsController.signal)
-    
-    // URL prüfen
-    const seasonQuery = Array.isArray(route.query.season)
-      ? route.query.season[0]
-      : route.query.season
-    const seasonParam = seasonQuery ? Number(seasonQuery) : null
-    if (seasonParam && seasons.value.includes(seasonParam)) {
-      selectedSeason.value = seasonParam
-    } else if (sortedSeasons.value.length > 0) {
-      const latestCurrentSeason = sortedSeasons.value.find((season) => season <= new Date().getFullYear())
-      selectedSeason.value = latestCurrentSeason ?? sortedSeasons.value[0]
+    const loadedSeasons = await getSeasons(signal)
+    if (signal.aborted) return null
+    seasons.value = loadedSeasons
+    return loadedSeasons
+  } catch (caughtError) {
+    if (!signal.aborted) {
+      seasonsError.value = getApiErrorMessage(caughtError, 'Saisons konnten nicht geladen werden.')
+      console.error(caughtError)
     }
-  } catch (err) {
-    error.value = 'Saisons konnten nicht geladen werden.'
-    console.error(err)
   } finally {
-    if (!seasonsController.signal.aborted) loading.value = false
+    if (!signal.aborted) seasonsLoading.value = false
   }
+
+  return null
+}
+
+const selectInitialSeason = (availableSeasons: number[]) => {
+  const seasonQuery = Array.isArray(route.query.season)
+    ? route.query.season[0]
+    : route.query.season
+  const seasonParam = seasonQuery ? Number(seasonQuery) : null
+
+  if (seasonParam && availableSeasons.includes(seasonParam)) {
+    selectedSeason.value = seasonParam
+  } else if (availableSeasons.length > 0) {
+    const latestCurrentSeason = [...availableSeasons]
+      .sort((first, second) => second - first)
+      .find((season) => season <= new Date().getFullYear())
+    selectedSeason.value = latestCurrentSeason ?? Math.max(...availableSeasons)
+  }
+}
+
+/** Load seasons first so a direct /results visit can choose a valid default. */
+onMounted(async () => {
+  const availableSeasons = await loadSeasons()
+  if (availableSeasons) selectInitialSeason(availableSeasons)
 })
 
 /**
@@ -92,35 +109,36 @@ onMounted(async () => {
  * 2. Setzt die Wochenends-Auswahl zurück (null)
  * 3. Aktualisiert die URL
  */
-watch(selectedSeason, async (newSeason) => {
-  if (newSeason === null) return
-
+const loadWeekends = async (newSeason: number) => {
   weekendsController?.abort()
   const controller = new AbortController()
   weekendsController = controller
-  const requestId = ++weekendRequestId
   selectedWeekendId.value = null
   startingGridSession.value = null
   weekends.value = []
   weekendsStatus.value = 'loading'
-  error.value = null
+  weekendsError.value = null
 
   void router.replace({ name: 'Results', query: { season: String(newSeason) } })
 
   try {
     const loadedWeekends = await getWeekends(newSeason, controller.signal)
 
-    if (controller.signal.aborted || requestId !== weekendRequestId) return
+    if (controller.signal.aborted) return
 
     weekends.value = loadedWeekends
     weekendsStatus.value = 'loaded'
-  } catch (err) {
-    if (controller.signal.aborted || requestId !== weekendRequestId) return
+  } catch (caughtError) {
+    if (controller.signal.aborted) return
 
     weekendsStatus.value = 'error'
-    error.value = 'Rennwochenenden konnten nicht geladen werden.'
-    console.error(err)
+    weekendsError.value = getApiErrorMessage(caughtError, 'Rennwochenenden konnten nicht geladen werden.')
+    console.error(caughtError)
   }
+}
+
+watch(selectedSeason, (newSeason) => {
+  if (newSeason !== null) void loadWeekends(newSeason)
 })
 
 onBeforeUnmount(() => {
@@ -139,6 +157,15 @@ watch(
     }
   },
 )
+
+const retrySeasons = async () => {
+  const availableSeasons = await loadSeasons()
+  if (availableSeasons && selectedSeason.value === null) selectInitialSeason(availableSeasons)
+}
+
+const retryWeekends = () => {
+  if (selectedSeason.value !== null) void loadWeekends(selectedSeason.value)
+}
 
 const selectSeason = (season: number) => {
   selectedSeason.value = season
@@ -164,17 +191,21 @@ const goHome = () => {
       :weekends="sortedWeekends"
       :selected-season="selectedSeason"
       :selected-weekend-id="selectedWeekendId"
-      :loading="loading"
-      :error="error"
+      :seasons-loading="seasonsLoading"
+      :seasons-error="seasonsError"
+      :weekends-loading="weekendsStatus === 'loading'"
+      :weekends-error="weekendsError"
       @select-season="selectSeason"
       @select-weekend="selectWeekend"
       @go-home="goHome"
+      @retry-seasons="retrySeasons"
+      @retry-weekends="retryWeekends"
     />
 
     <main class="results-page__main">
       <StartingGrid
         v-if="selectedWeekendId && selectedWeekend && startingGridSession"
-        :key="`${selectedWeekend.id}-${startingGridSession.id}`"
+        :key="`${selectedSeason}-${selectedWeekend.id}-${startingGridSession.id}`"
         :weekend="selectedWeekend"
         :season="selectedSeason!"
         :source-session="startingGridSession"
@@ -191,8 +222,11 @@ const goHome = () => {
         :season="selectedSeason"
         :weekends-status="weekendsStatus"
       />
-      <div v-else class="results-page__empty">
-        <p>Wählen Sie ein Rennwochenende aus der Seitenleiste</p>
+      <div v-else class="results-page__empty" role="status">
+        <p v-if="seasonsLoading">Saisons werden geladen…</p>
+        <p v-else-if="seasonsError">Saisons konnten nicht geladen werden. Bitte versuchen Sie es erneut.</p>
+        <p v-else-if="seasons.length === 0">Es sind keine Saisons verfügbar.</p>
+        <p v-else>Wählen Sie ein Rennwochenende aus der Seitenleiste.</p>
       </div>
     </main>
   </div>
@@ -207,6 +241,7 @@ const goHome = () => {
 
 .results-page__main {
   flex: 1;
+  min-width: 0;
   padding: 32px;
   overflow-y: auto;
 }
@@ -217,5 +252,16 @@ const goHome = () => {
   justify-content: center;
   height: 100%;
   color: rgba(255, 255, 255, 0.6);
+}
+
+@media (max-width: 768px) {
+  .results-page {
+    flex-direction: column;
+  }
+
+  .results-page__main {
+    width: 100%;
+    padding: 24px 16px;
+  }
 }
 </style>

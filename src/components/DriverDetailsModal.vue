@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { getApiErrorMessage } from '../api/client'
 import { getSeasonDriver } from '../api/endpoints'
 import type { Driver } from '../api/types'
 
@@ -17,6 +18,7 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const portraitFailed = ref(false)
 let requestId = 0
+let controller: AbortController | null = null
 
 const portraitSrc = computed(() => {
   const portrait = driver.value?.portrait_base64
@@ -34,6 +36,8 @@ const portraitSrc = computed(() => {
 })
 
 const loadDriver = async () => {
+  controller?.abort()
+  controller = null
   const currentRequest = ++requestId
   driver.value = null
   error.value = null
@@ -44,12 +48,16 @@ const loadDriver = async () => {
     return
   }
 
+  const activeController = new AbortController()
+  controller = activeController
   loading.value = true
   try {
-    const loadedDriver = await getSeasonDriver(props.season, props.driverId)
-    if (currentRequest === requestId) driver.value = loadedDriver
-  } catch {
-    if (currentRequest === requestId) error.value = 'Fahrerinformationen konnten nicht geladen werden.'
+    const loadedDriver = await getSeasonDriver(props.season, props.driverId, activeController.signal)
+    if (currentRequest === requestId && !activeController.signal.aborted) driver.value = loadedDriver
+  } catch (caughtError) {
+    if (currentRequest === requestId && !activeController.signal.aborted) {
+      error.value = getApiErrorMessage(caughtError, 'Fahrerinformationen konnten nicht geladen werden.')
+    }
   } finally {
     if (currentRequest === requestId) loading.value = false
   }
@@ -58,11 +66,15 @@ const loadDriver = async () => {
 watch(() => [props.open, props.season, props.driverId] as const, loadDriver, { immediate: true })
 
 const closeOnEscape = (event: KeyboardEvent) => {
-  if (event.key === 'Escape' && props.open) emit('close')
+  if (event.key === 'Escape' && props.open) {
+    event.stopImmediatePropagation()
+    emit('close')
+  }
 }
 
 if (typeof window !== 'undefined') window.addEventListener('keydown', closeOnEscape)
 onBeforeUnmount(() => {
+  controller?.abort()
   if (typeof window !== 'undefined') window.removeEventListener('keydown', closeOnEscape)
 })
 </script>

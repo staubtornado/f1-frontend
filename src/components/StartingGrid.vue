@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { ApiError } from '../api/client'
+import { ApiError, getApiErrorMessage } from '../api/client'
 import { getSeasonDriver, getStartingGrid } from '../api/endpoints'
 import type { Driver, RaceWeekend, Session, SessionType, StartingGrid as StartingGridData } from '../api/types'
 
@@ -107,7 +107,7 @@ const loadStartingGrid = async () => {
     if (activeRequestId !== requestId || activeController.signal.aborted) return
     error.value = caughtError instanceof ApiError && caughtError.status === 404
       ? 'Der Starting-Grid-Endpunkt wurde im Backend nicht gefunden.'
-      : 'Starting Grid konnte nicht geladen werden.'
+      : getApiErrorMessage(caughtError, 'Starting Grid konnte nicht geladen werden.')
     console.error(caughtError)
   } finally {
     if (activeRequestId === requestId) loading.value = false

@@ -12,7 +12,8 @@ const routes = [
     path: '/results',
     name: 'Results',
     component: Results,
-  }
+  },
+  { path: '/:pathMatch(.*)*', redirect: '/' },
 ]
 
 const router = createRouter({

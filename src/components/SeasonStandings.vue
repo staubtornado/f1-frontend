@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ApiError } from '../api/client'
+import { ApiError, getApiErrorMessage } from '../api/client'
 import { getDriverStandings, getTeamStandings } from '../api/endpoints'
 import type { DriverStanding, TeamStanding } from '../api/types'
 import DriverDetailsModal from './DriverDetailsModal.vue'
@@ -63,7 +63,7 @@ const loadStandings = async () => {
 
     error.value = caughtError instanceof ApiError && caughtError.status === 404
       ? 'Fahrerwertungs-Endpunkt im Backend nicht gefunden (404). Bitte Backend aktualisieren.'
-      : 'Weltmeisterschaft konnte nicht geladen werden.'
+      : getApiErrorMessage(caughtError, 'Weltmeisterschaft konnte nicht geladen werden.')
     console.error(caughtError)
   } finally {
     if (requestId === loadRequestId) loading.value = false
@@ -106,7 +106,7 @@ const loadTeamStandings = async () => {
     if (requestId !== teamRequestId) return
     teamError.value = caughtError instanceof ApiError && caughtError.status === 404
       ? 'Teamwertungs-Endpunkt im Backend nicht gefunden (404). Bitte Backend aktualisieren.'
-      : 'Teamwertung konnte nicht geladen werden.'
+      : getApiErrorMessage(caughtError, 'Teamwertung konnte nicht geladen werden.')
     console.error(caughtError)
   } finally {
     if (requestId === teamRequestId) teamLoading.value = false

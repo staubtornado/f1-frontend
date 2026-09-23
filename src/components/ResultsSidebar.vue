@@ -24,8 +24,10 @@ interface Props {
   weekends: RaceWeekend[]
   selectedSeason: number | null
   selectedWeekendId: number | null
-  loading: boolean
-  error: string | null
+  seasonsLoading: boolean
+  seasonsError: string | null
+  weekendsLoading: boolean
+  weekendsError: string | null
 }
 
 defineProps<Props>()
@@ -33,6 +35,8 @@ defineEmits<{
   'select-season': [season: number]
   'select-weekend': [weekendId: number]
   'go-home': []
+  'retry-seasons': []
+  'retry-weekends': []
 }>()
 
 /**
@@ -58,10 +62,13 @@ const formatDate = (dateStr: string): string => {
       <div class="sidebar__section">
         <h2 class="sidebar__title">Saisons</h2>
 
-        <p v-if="loading" class="sidebar__status">Laden…</p>
-        <p v-else-if="error" class="sidebar__error">{{ error }}</p>
+        <p v-if="seasonsLoading" class="sidebar__status" role="status">Saisons werden geladen…</p>
+        <div v-else-if="seasonsError" class="sidebar__error" role="alert">
+          <p>{{ seasonsError }}</p>
+          <button class="sidebar__retry" type="button" @click="$emit('retry-seasons')">Erneut versuchen</button>
+        </div>
 
-        <ul v-else class="sidebar__list">
+        <ul v-else-if="seasons.length > 0" class="sidebar__list">
           <li v-for="season in seasons" :key="season">
             <button
               class="sidebar__button"
@@ -72,12 +79,18 @@ const formatDate = (dateStr: string): string => {
             </button>
           </li>
         </ul>
+        <p v-else class="sidebar__empty">Keine Saisons verfügbar.</p>
       </div>
 
       <div v-if="selectedSeason" class="sidebar__section">
         <h2 class="sidebar__title">Wochenenden</h2>
 
-        <ul v-if="weekends.length > 0" class="sidebar__list">
+        <p v-if="weekendsLoading" class="sidebar__status" role="status">Rennwochenenden werden geladen…</p>
+        <div v-else-if="weekendsError" class="sidebar__error" role="alert">
+          <p>{{ weekendsError }}</p>
+          <button class="sidebar__retry" type="button" @click="$emit('retry-weekends')">Erneut versuchen</button>
+        </div>
+        <ul v-else-if="weekends.length > 0" class="sidebar__list">
           <li v-for="weekend in weekends" :key="weekend.id">
             <button
               class="sidebar__button sidebar__button--weekend"
@@ -176,6 +189,25 @@ const formatDate = (dateStr: string): string => {
   color: #ff6b6b;
 }
 
+.sidebar__error p {
+  margin: 0 0 8px;
+}
+
+.sidebar__retry {
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 6px 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.sidebar__retry:hover,
+.sidebar__retry:focus-visible {
+  border-color: var(--f1-red);
+}
+
 .sidebar__button {
   background: none;
   border: 1px solid transparent;
@@ -220,7 +252,10 @@ const formatDate = (dateStr: string): string => {
 
 @media (max-width: 768px) {
   .sidebar {
-    width: 240px;
+    width: 100%;
+    max-height: 38svh;
+    position: sticky;
+    z-index: 10;
   }
 }
 </style>

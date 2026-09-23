@@ -9,8 +9,9 @@
  */
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { getApiErrorMessage } from '../api/client'
 import { getSeasons } from '../api/endpoints'
 
 const router = useRouter()
@@ -18,6 +19,7 @@ const seasons = ref<number[]>([])
 const selectedSeason = ref<number | null>(null)
 const loading = ref(true)
 const error = ref<string | null>(null)
+let seasonsController: AbortController | null = null
 
 // Sortiert die Saisons in absteigender Reihenfolge (neueste zuerst)
 const sortedSeasons = computed(() => [...seasons.value].sort((a, b) => b - a))
@@ -32,18 +34,26 @@ const handleSeasonSelect = () => {
   }
 }
 
-/**
- * Lädt alle verfügbaren Saisons vom Backend beim Seitenladevorgang
- */
-onMounted(async () => {
+const loadSeasons = async () => {
+  seasonsController?.abort()
+  const controller = new AbortController()
+  seasonsController = controller
+  loading.value = true
+  error.value = null
+
   try {
-    seasons.value = await getSeasons()
-  } catch {
-    error.value = 'Saisons konnten nicht geladen werden.'
+    seasons.value = await getSeasons(controller.signal)
+  } catch (caughtError) {
+    if (!controller.signal.aborted) {
+      error.value = getApiErrorMessage(caughtError, 'Saisons konnten nicht geladen werden.')
+    }
   } finally {
-    loading.value = false
+    if (!controller.signal.aborted) loading.value = false
   }
-})
+}
+
+onMounted(loadSeasons)
+onBeforeUnmount(() => seasonsController?.abort())
 </script>
 
 <template>
@@ -61,7 +71,10 @@ onMounted(async () => {
         <label class="season-picker__label" for="season-select">Saison wählen</label>
 
         <p v-if="loading" class="season-picker__status">Laden…</p>
-        <p v-else-if="error" class="season-picker__error">{{ error }}</p>
+        <div v-else-if="error" class="season-picker__error" role="alert">
+          <p>{{ error }}</p>
+          <button type="button" @click="loadSeasons">Erneut versuchen</button>
+        </div>
 
         <select
           v-else
@@ -70,7 +83,9 @@ onMounted(async () => {
           class="season-picker__select"
           @change="handleSeasonSelect"
         >
-          <option :value="null" disabled>— Saison auswählen —</option>
+          <option :value="null" disabled>
+            {{ sortedSeasons.length ? '— Saison auswählen —' : 'Keine Saisons verfügbar' }}
+          </option>
           <option v-for="year in sortedSeasons" :key="year" :value="year">
             {{ year }}
           </option>
@@ -165,12 +180,28 @@ onMounted(async () => {
 }
 
 .season-picker__error {
-  margin: 0;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
   padding: 10px 14px;
   font-size: 0.875rem;
   color: #ff6b6b;
   background: rgba(225, 6, 0, 0.1);
   border: 1px solid rgba(225, 6, 0, 0.3);
   border-radius: 8px;
+}
+
+.season-picker__error p {
+  margin: 0;
+}
+
+.season-picker__error button {
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 7px 10px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
 }
 </style>

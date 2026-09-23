@@ -11,6 +11,7 @@
 
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { getApiErrorMessage } from '../api/client'
 import { getSessionResults, getSessions } from '../api/endpoints'
 import type { Session, RaceWeekend, SessionClassification } from '../api/types'
 import DriverDetailsModal from './DriverDetailsModal.vue'
@@ -105,7 +106,7 @@ const loadSessions = async () => {
     sessions.value = loadedSessions
   } catch (err) {
     if (controller.signal.aborted || requestId !== sessionsRequestId) return
-    error.value = 'Sessions konnten nicht geladen werden.'
+    error.value = getApiErrorMessage(err, 'Sessions konnten nicht geladen werden.')
     console.error(err)
   } finally {
     if (requestId === sessionsRequestId) loading.value = false
@@ -129,7 +130,7 @@ const openSessionPopup = async (session: Session) => {
     sessionResults.value = result.classifications
   } catch (err) {
     if (requestId !== resultsRequestId) return
-    popupError.value = 'Ergebnisse konnten nicht geladen werden.'
+    popupError.value = getApiErrorMessage(err, 'Ergebnisse konnten nicht geladen werden.')
     console.error(err)
   } finally {
     if (requestId === resultsRequestId) popupLoading.value = false
@@ -146,20 +147,31 @@ const closeSessionPopup = () => {
   selectedDriverId.value = null
 }
 
+const handleEscape = (event: KeyboardEvent) => {
+  if (event.key === 'Escape' && popupVisible.value) closeSessionPopup()
+}
+
 const getDriverLabel = (driverId: number): string => {
   return `Fahrer #${driverId}`
 }
 
-// Lädt Sessions beim initialen Mount
-onMounted(loadSessions)
+// Lädt Sessions beim initialen Mount und schließt ein ggf. offenes altes Popup.
+onMounted(() => {
+  window.addEventListener('keydown', handleEscape)
+  void loadSessions()
+})
 
 // Lädt Sessions neu, wenn sich das Wochenende ändert
-watch(() => props.weekend.id, loadSessions)
+watch(() => props.weekend.id, () => {
+  closeSessionPopup()
+  void loadSessions()
+})
 onBeforeUnmount(() => {
   sessionsRequestId++
   resultsRequestId++
   sessionsController?.abort()
   resultsController?.abort()
+  window.removeEventListener('keydown', handleEscape)
 })
 </script>
 
@@ -221,40 +233,46 @@ onBeforeUnmount(() => {
       <p v-if="loading" class="results-table-wrapper__status">Laden…</p>
       <p v-else-if="error" class="results-table-wrapper__error">{{ error }}</p>
 
-      <table v-else-if="sessions.length > 0" class="results-table">
-        <thead>
-          <tr>
-            <th>Session</th>
-            <th>ID</th>
-            <th>Datum</th>
-            <th>Uhrzeit</th>
-            <th>Starting Grid</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="session in sessions" :key="session.id" @click="openSessionPopup(session)">
-            <td class="results-table__session-type">
-              {{ getSessionTypeName(session.type) }}
-            </td>
-            <td class="results-table__session-id">{{ session.id }}</td>
-            <td class="results-table__date">
-              {{ formatDate(session.start_time) }}
-            </td>
-            <td class="results-table__time">
-              {{ formatTime(session.start_time) }}
-            </td>
-            <td class="results-table__grid-action">
-              <button
-                v-if="hasStartingGrid(session)"
-                class="results-table__grid-button"
-                type="button"
-                @click.stop="emit('show-starting-grid', session)"
-              >Show Starting Grid</button>
-              <span v-else aria-hidden="true">—</span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div v-else-if="sessions.length > 0" class="results-table__scroll">
+        <table class="results-table">
+          <thead>
+            <tr>
+              <th>Session</th>
+              <th>ID</th>
+              <th>Datum</th>
+              <th>Uhrzeit</th>
+              <th>Starting Grid</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="session in sessions" :key="session.id">
+              <td class="results-table__session-type">
+                <button
+                  class="results-table__session-link"
+                  type="button"
+                  @click="openSessionPopup(session)"
+                >{{ getSessionTypeName(session.type) }}</button>
+              </td>
+              <td class="results-table__session-id">{{ session.id }}</td>
+              <td class="results-table__date">
+                {{ formatDate(session.start_time) }}
+              </td>
+              <td class="results-table__time">
+                {{ formatTime(session.start_time) }}
+              </td>
+              <td class="results-table__grid-action">
+                <button
+                  v-if="hasStartingGrid(session)"
+                  class="results-table__grid-button"
+                  type="button"
+                  @click.stop="emit('show-starting-grid', session)"
+                >Show Starting Grid</button>
+                <span v-else aria-hidden="true">—</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
       <div v-else class="results-table-wrapper__empty">
         <p>Keine Sessions verfügbar</p>
@@ -263,13 +281,24 @@ onBeforeUnmount(() => {
 
     <!-- Session Results Popup -->
     <div v-if="popupVisible" class="session-results-popup" @click="closeSessionPopup">
-        <div class="session-results-popup__container" @click.stop>
+        <div
+          class="session-results-popup__container"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="session-results-title"
+          @click.stop
+        >
             <div class="session-results-popup__header">
-            <h3 class="session-results-popup__title">
+            <h3 id="session-results-title" class="session-results-popup__title">
                 Ergebnisse für {{ popupSession ? getSessionTypeName(popupSession.type) : 'Session' }}
                 <span v-if="popupLoading" class="session-results-popup__loading-indicator">Laden…</span>
             </h3>
-            <button class="session-results-popup__close" @click="closeSessionPopup">✖</button>
+            <button
+              class="session-results-popup__close"
+              type="button"
+              aria-label="Session-Ergebnisse schließen"
+              @click="closeSessionPopup"
+            >✖</button>
             </div>
 
             <div v-if="popupError" class="session-results-popup__error">
@@ -443,6 +472,11 @@ onBeforeUnmount(() => {
   width: 100%;
 }
 
+.results-table__scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 .results-table-wrapper__title {
   margin: 0 0 16px;
   font-size: 1.5rem;
@@ -501,6 +535,22 @@ onBeforeUnmount(() => {
 .results-table__session-type {
   font-weight: 500;
   color: var(--text);
+}
+
+.results-table__session-link {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.results-table__session-link:hover,
+.results-table__session-link:focus-visible {
+  color: var(--f1-red);
+  outline: none;
 }
 
 .results-table__date,
@@ -880,6 +930,7 @@ onBeforeUnmount(() => {
 
   .results-table {
     font-size: 0.875rem;
+    min-width: 540px;
   }
 
   .results-table th,
