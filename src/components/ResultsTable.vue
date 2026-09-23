@@ -11,8 +11,8 @@
 
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { getSeasonDriver, getSessionResults, getSessions } from '../api/endpoints'
-import type { Driver, Session, RaceWeekend, SessionClassification } from '../api/types'
+import { getSessionResults, getSessions } from '../api/endpoints'
+import type { Session, RaceWeekend, SessionClassification } from '../api/types'
 import DriverDetailsModal from './DriverDetailsModal.vue'
 
 interface Props {
@@ -33,7 +33,6 @@ const popupLoading = ref(false)
 const popupError = ref<string | null>(null)
 const popupSession = ref<Session | null>(null)
 const sessionResults = ref<SessionClassification[]>([])
-const driverProfiles = ref<Record<number, Driver>>({})
 const selectedDriverId = ref<number | null>(null)
 let sessionsRequestId = 0
 let resultsRequestId = 0
@@ -128,17 +127,6 @@ const openSessionPopup = async (session: Session) => {
     const result = await getSessionResults(session.id, controller.signal)
     if (controller.signal.aborted || requestId !== resultsRequestId) return
     sessionResults.value = result.classifications
-
-    for (const { driver_id } of result.classifications) {
-      void getSeasonDriver(props.season, driver_id, controller.signal)
-        .then((profile) => {
-          if (requestId !== resultsRequestId) return
-          driverProfiles.value = { ...driverProfiles.value, [driver_id]: profile }
-        })
-        .catch(() => {
-          // Der Fahrer bleibt über seine ID auffindbar, auch wenn sein Profil fehlt.
-        })
-    }
   } catch (err) {
     if (requestId !== resultsRequestId) return
     popupError.value = 'Ergebnisse konnten nicht geladen werden.'
@@ -155,12 +143,11 @@ const closeSessionPopup = () => {
   popupError.value = null
   popupSession.value = null
   sessionResults.value = []
-  driverProfiles.value = {}
   selectedDriverId.value = null
 }
 
 const getDriverLabel = (driverId: number): string => {
-  return driverProfiles.value[driverId]?.full_name ?? `Fahrer #${driverId}`
+  return `Fahrer #${driverId}`
 }
 
 // Lädt Sessions beim initialen Mount

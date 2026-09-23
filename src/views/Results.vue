@@ -35,6 +35,7 @@ const selectedSeason = ref<number | null>(null)
 const weekends = ref<RaceWeekend[]>([])
 const selectedWeekendId = ref<number | null>(null)
 const startingGridSession = ref<Session | null>(null)
+const weekendsStatus = ref<'idle' | 'loading' | 'loaded' | 'error'>('idle')
 const loading = ref(true)
 const error = ref<string | null>(null)
 let weekendRequestId = 0
@@ -73,7 +74,8 @@ onMounted(async () => {
     if (seasonParam && seasons.value.includes(seasonParam)) {
       selectedSeason.value = seasonParam
     } else if (sortedSeasons.value.length > 0) {
-      selectedSeason.value = sortedSeasons.value[0]
+      const latestCurrentSeason = sortedSeasons.value.find((season) => season <= new Date().getFullYear())
+      selectedSeason.value = latestCurrentSeason ?? sortedSeasons.value[0]
     }
   } catch (err) {
     error.value = 'Saisons konnten nicht geladen werden.'
@@ -100,6 +102,7 @@ watch(selectedSeason, async (newSeason) => {
   selectedWeekendId.value = null
   startingGridSession.value = null
   weekends.value = []
+  weekendsStatus.value = 'loading'
   error.value = null
 
   void router.replace({ name: 'Results', query: { season: String(newSeason) } })
@@ -110,9 +113,11 @@ watch(selectedSeason, async (newSeason) => {
     if (controller.signal.aborted || requestId !== weekendRequestId) return
 
     weekends.value = loadedWeekends
+    weekendsStatus.value = 'loaded'
   } catch (err) {
     if (controller.signal.aborted || requestId !== weekendRequestId) return
 
+    weekendsStatus.value = 'error'
     error.value = 'Rennwochenenden konnten nicht geladen werden.'
     console.error(err)
   }
@@ -184,6 +189,7 @@ const goHome = () => {
       <SeasonStandings
         v-else-if="selectedSeason !== null"
         :season="selectedSeason"
+        :weekends-status="weekendsStatus"
       />
       <div v-else class="results-page__empty">
         <p>Wählen Sie ein Rennwochenende aus der Seitenleiste</p>

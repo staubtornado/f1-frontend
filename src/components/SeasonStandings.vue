@@ -1,17 +1,16 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ApiError } from '../api/client'
-import { getDriverStandings, getSeasonDriver, getTeamStandings } from '../api/endpoints'
-import type { Driver, DriverStanding, TeamStanding } from '../api/types'
+import { getDriverStandings, getTeamStandings } from '../api/endpoints'
+import type { DriverStanding, TeamStanding } from '../api/types'
 import DriverDetailsModal from './DriverDetailsModal.vue'
 
 interface Props {
   season: number
+  weekendsStatus: 'idle' | 'loading' | 'loaded' | 'error'
 }
 
-interface DriverStandingRow extends DriverStanding {
-  driver: Driver | null
-}
+type DriverStandingRow = DriverStanding
 
 const props = defineProps<Props>()
 
@@ -22,15 +21,13 @@ const teamLoading = ref(true)
 const error = ref<string | null>(null)
 const teamError = ref<string | null>(null)
 let loadRequestId = 0
+let teamRequestId = 0
 let standingsController: AbortController | null = null
+let teamController: AbortController | null = null
 const selectedDriverId = ref<number | null>(null)
 
 const getDriverLabel = (row: DriverStandingRow): string => {
-  return row.driver?.full_name ?? `Fahrer #${row.driver_id}`
-}
-
-const getTeamLabel = (row: DriverStandingRow): string => {
-  return row.driver?.team_name ?? 'Team unbekannt'
+  return `Fahrer #${row.driver_id}`
 }
 
 const loadStandings = async () => {
@@ -39,55 +36,28 @@ const loadStandings = async () => {
   standingsController = controller
   const requestId = ++loadRequestId
   loading.value = true
-  teamLoading.value = true
   error.value = null
-  teamError.value = null
   driverRows.value = []
-  teamRows.value = []
 
-  void getTeamStandings(props.season, controller.signal)
-    .then((teamStandings) => {
-      if (requestId !== loadRequestId) return
-      teamRows.value = teamStandings.standings
-        .slice()
-        .sort((first, second) => first.position - second.position)
-    })
-    .catch((caughtError: unknown) => {
-      if (requestId !== loadRequestId) return
-      teamError.value = caughtError instanceof ApiError && caughtError.status === 404
-        ? 'Teamwertungs-Endpunkt im Backend nicht gefunden (404). Bitte Backend aktualisieren.'
-        : 'Teamwertung konnte nicht geladen werden.'
-      console.error(caughtError)
-    })
-    .finally(() => {
-      if (requestId === loadRequestId) teamLoading.value = false
-    })
+  if (props.season > new Date().getFullYear()) {
+    error.value = 'Für diese Saison gibt es noch keine Fahrerwertung.'
+    loading.value = false
+    return
+  }
 
   try {
     const standings = await getDriverStandings(props.season, controller.signal)
     const rows: DriverStandingRow[] = standings.standings
-      .map((standing) => ({ ...standing, driver: null }))
+      .map((standing) => ({ ...standing }))
       .sort((first, second) => first.position - second.position)
 
     if (requestId !== loadRequestId) return
 
-    // Zeige Positionen und Punkte sofort; Profilbilder und Namen kommen separat
-    // über den langsameren Driver-Detail-Endpunkt.
+    // Der Driver-Detail-Endpunkt ist teuer: Er lädt ebenfalls die Saison-Wochenenden
+    // und Fahrerfotos aus OpenF1. Profile deshalb erst beim Klick laden, statt für
+    // alle Tabellenzeilen parallel Requests zu starten (Rate-Limit/Cache-Stampede).
     driverRows.value = rows
     loading.value = false
-
-    for (const row of rows) {
-      void getSeasonDriver(props.season, row.driver_id, controller.signal)
-        .then((driver) => {
-          if (requestId !== loadRequestId) return
-          driverRows.value = driverRows.value.map((currentRow) =>
-            currentRow.driver_id === row.driver_id ? { ...currentRow, driver } : currentRow,
-          )
-        })
-        .catch(() => {
-          // IDs bleiben als klickbare Fallbacks verfügbar, auch wenn ein Profil fehlt.
-        })
-    }
   } catch (caughtError) {
     if (requestId !== loadRequestId) return
 
@@ -100,11 +70,57 @@ const loadStandings = async () => {
   }
 }
 
+const loadTeamStandings = async () => {
+  teamController?.abort()
+  const controller = new AbortController()
+  teamController = controller
+  const requestId = ++teamRequestId
+  teamRows.value = []
+  teamError.value = null
+
+  if (props.season > new Date().getFullYear()) {
+    teamLoading.value = false
+    teamError.value = 'Für diese Saison gibt es noch keine Teamwertung.'
+    return
+  }
+
+  if (props.weekendsStatus === 'idle' || props.weekendsStatus === 'loading') {
+    teamLoading.value = true
+    return
+  }
+
+  if (props.weekendsStatus === 'error') {
+    teamLoading.value = false
+    teamError.value = 'Teamwertung übersprungen, da die Rennwochenenden nicht geladen werden konnten.'
+    return
+  }
+
+  teamLoading.value = true
+  try {
+    const teamStandings = await getTeamStandings(props.season, controller.signal)
+    if (requestId !== teamRequestId) return
+    teamRows.value = teamStandings.standings
+      .slice()
+      .sort((first, second) => first.position - second.position)
+  } catch (caughtError: unknown) {
+    if (requestId !== teamRequestId) return
+    teamError.value = caughtError instanceof ApiError && caughtError.status === 404
+      ? 'Teamwertungs-Endpunkt im Backend nicht gefunden (404). Bitte Backend aktualisieren.'
+      : 'Teamwertung konnte nicht geladen werden.'
+    console.error(caughtError)
+  } finally {
+    if (requestId === teamRequestId) teamLoading.value = false
+  }
+}
+
 onMounted(loadStandings)
 watch(() => props.season, loadStandings)
+watch(() => [props.season, props.weekendsStatus] as const, loadTeamStandings, { immediate: true })
 onBeforeUnmount(() => {
   loadRequestId++
   standingsController?.abort()
+  teamRequestId++
+  teamController?.abort()
 })
 </script>
 
@@ -140,9 +156,9 @@ onBeforeUnmount(() => {
                 <button
                   class="standings-table__name standings-table__driver-link"
                   type="button"
+                  :aria-label="`Details für Fahrer #${row.driver_id} öffnen`"
                   @click="selectedDriverId = row.driver_id"
                 >{{ getDriverLabel(row) }}</button>
-                <span class="standings-table__team"> | {{ getTeamLabel(row) }}</span>
               </td>
               <td class="standings-table__points">{{ row.points }} PTS</td>
            </tr>
